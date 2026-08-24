@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+*.db
+ymc_accounting.db
+uploads/
+.DS_Store

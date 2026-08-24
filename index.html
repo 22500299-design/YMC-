@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YMC 회계 관리 시스템</title>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- ChartJS for Beautiful Dashboard Charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- SheetJS for Client-Side Excel Export -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- Custom Styleheet -->
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- MAIN APP LAYOUT (ADMIN DASHBOARD) -->
+    <div id="app-layout">
+        <!-- Sidebar Navigation -->
+        <aside>
+            <div class="brand">
+                <div class="brand-logo">Y</div>
+                <div class="brand-name">YMC 회계관리</div>
+            </div>
+            <nav>
+                <a class="nav-item active" data-target="dashboard">
+                    <i class="fa-solid fa-chart-line"></i> 대시보드
+                </a>
+                <a class="nav-item" data-target="events">
+                    <i class="fa-solid fa-calendar-days"></i> 행사 마스터
+                </a>
+                <a class="nav-item" data-target="budgets">
+                    <i class="fa-solid fa-calculator"></i> 예산 계획
+                </a>
+                <a class="nav-item" data-target="income">
+                    <i class="fa-solid fa-wallet"></i> 수입 관리
+                </a>
+                <a class="nav-item" data-target="expenditures">
+                    <i class="fa-solid fa-receipt"></i> 지출 관리
+                </a>
+                <a class="nav-item" data-target="gallery">
+                    <i class="fa-solid fa-images"></i> 영수증 갤러리
+                </a>
+                <a class="nav-item" data-target="settlements">
+                    <i class="fa-solid fa-file-invoice-dollar"></i> 결산 보고
+                </a>
+                <a class="nav-item" data-target="export">
+                    <i class="fa-solid fa-file-excel"></i> 보고서 및 출력
+                </a>
+                <!-- Link to Form View -->
+                <button class="btn nav-item nav-item-form-btn" id="open-member-form-btn">
+                    <i class="fa-solid fa-paper-plane"></i> 영수증 제출 폼
+                </button>
+            </nav>
+        </aside>
+
+        <!-- Main Workspace Area -->
+        <main>
+            <!-- Header -->
+            <header>
+                <div class="page-title">
+                    <h1 id="view-title">대시보드</h1>
+                    <p id="view-subtitle">동아리 회계 정보 통합 대시보드</p>
+                </div>
+                <div class="user-profile">
+                    <div class="user-avatar">YMC</div>
+                    <div>
+                        <div style="font-weight: 600; font-size: 0.9rem;">회계 담당자</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary);">관리자 모드</div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- 1. DASHBOARD VIEW -->
+            <section id="dashboard-section" class="content-section active">
+                <!-- Summary Stats Cards -->
+                <div class="stats-grid">
+                    <div class="stat-card glass-panel" style="--card-color: var(--primary);">
+                        <div class="stat-header">
+                            <span>총 수입 (예산)</span>
+                            <i class="fa-solid fa-arrow-trend-up"></i>
+                        </div>
+                        <div class="stat-value" id="stat-total-income">₩0</div>
+                        <div class="stat-change up"><i class="fa-solid fa-circle-check"></i> 실시간 반영</div>
+                    </div>
+                    <div class="stat-card glass-panel" style="--card-color: var(--secondary);">
+                        <div class="stat-header">
+                            <span>총 지출 (결산)</span>
+                            <i class="fa-solid fa-arrow-trend-down"></i>
+                        </div>
+                        <div class="stat-value" id="stat-total-expenditure">₩0</div>
+                        <div class="stat-change down"><i class="fa-solid fa-receipt"></i> 영수증 증빙 기준</div>
+                    </div>
+                    <div class="stat-card glass-panel" style="--card-color: var(--accent);">
+                        <div class="stat-header">
+                            <span>현재 잔액</span>
+                            <i class="fa-solid fa-scale-balanced"></i>
+                        </div>
+                        <div class="stat-value" id="stat-balance">₩0</div>
+                        <div class="stat-change" id="balance-change-indicator" style="color: var(--secondary);">
+                            <i class="fa-solid fa-wallet"></i> 동아리 가용 예산
+                        </div>
+                    </div>
+                    <div class="stat-card glass-panel" style="--card-color: var(--warning);">
+                        <div class="stat-header">
+                            <span>승인 대기 영수증</span>
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                        </div>
+                        <div class="stat-value" id="stat-pending-count">0건</div>
+                        <div class="stat-change" style="color: var(--warning);"><i
+                                class="fa-solid fa-circle-exclamation"></i> 신속 검토 필요</div>
+                    </div>
+                </div>
+
+                <!-- Dashboard Details Layout -->
+                <div class="dashboard-details-grid">
+                    <!-- Event Wise Summary Table -->
+                    <div class="glass-panel" style="display: flex; flex-direction: column;">
+                        <div class="panel-header">
+                            <span class="panel-title"><i class="fa-solid fa-circle-info"></i> 행사별 예산/결산 현황</span>
+                        </div>
+                        <div class="panel-body" style="flex: 1; padding: 0;">
+                            <div class="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>행사명</th>
+                                            <th>수입(예산)</th>
+                                            <th>지출(결산)</th>
+                                            <th>잔액</th>
+                                            <th>진행률</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="dashboard-event-table-body">
+                                        <!-- Dynamic Data -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Chart Panel -->
+                    <div class="glass-panel" style="display: flex; flex-direction: column; min-height: 320px;">
+                        <div class="panel-header">
+                            <span class="panel-title"><i class="fa-solid fa-chart-pie"></i> 수입/지출 분포</span>
+                        </div>
+                        <div class="panel-body"
+                            style="flex: 1; display: flex; align-items: center; justify-content: center;">
+                            <canvas id="dashboard-summary-chart" style="max-height: 240px; max-width: 240px;"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. EVENTS MASTER VIEW -->
+            <section id="events-section" class="content-section">
+                <div class="glass-panel">
+                    <div class="panel-header">
+                        <span class="panel-title">전체 행사 목록</span>
+                        <button class="btn btn-primary" id="add-event-btn"><i class="fa-solid fa-plus"></i> 행사
+                            추가</button>
+                    </div>
+                    <div class="panel-body" style="padding: 0;">
+                        <div id="events-list-container">
+                            <!-- Dynamic Event List -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2-2. BUDGET PLANNING VIEW -->
+            <section id="budgets-section" class="content-section">
+                <div class="filter-bar">
+                    <input type="text" id="budget-search" class="search-input" placeholder="예산 계획 검색...">
+                    <select id="budget-filter-event">
+                        <option value="">모든 행사 필터</option>
+                    </select>
+                    <select id="budget-filter-type">
+                        <option value="">모든 구분 필터</option>
+                        <option value="수입">수입 예산</option>
+                        <option value="지출">지출 예산</option>
+                    </select>
+                    <button class="btn btn-primary" id="add-budget-btn"><i class="fa-solid fa-plus"></i> 예산 계획
+                        등록</button>
+                </div>
+                <div class="glass-panel">
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>행사명</th>
+                                    <th>구분</th>
+                                    <th>분류</th>
+                                    <th>예산 항목명</th>
+                                    <th>예산 금액</th>
+                                    <th>작업</th>
+                                </tr>
+                            </thead>
+                            <tbody id="budget-table-body">
+                                <!-- Dynamic Data -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. INCOME LEDGER VIEW -->
+            <section id="income-section" class="content-section">
+                <div class="filter-bar">
+                    <input type="text" id="income-search" class="search-input" placeholder="수입 내역 검색...">
+                    <select id="income-filter-event">
+                        <option value="">모든 행사 필터</option>
+                    </select>
+                    <select id="income-filter-category">
+                        <option value="">모든 분류 필터</option>
+                        <option value="이월금">이월금</option>
+                        <option value="지원금">지원금</option>
+                        <option value="회비">회비</option>
+                        <option value="이자/캐시백">이자/캐시백</option>
+                        <option value="후원">후원</option>
+                        <option value="기타">기타</option>
+                    </select>
+                    <button class="btn btn-primary" id="add-income-btn"><i class="fa-solid fa-plus"></i> 수입 등록</button>
+                </div>
+                <div class="glass-panel">
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>행사명</th>
+                                    <th>분류</th>
+                                    <th>내역</th>
+                                    <th>금액</th>
+                                    <th>산출근거</th>
+                                    <th>비고</th>
+                                    <th>작업</th>
+                                </tr>
+                            </thead>
+                            <tbody id="income-table-body">
+                                <!-- Dynamic Data -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 4. EXPENDITURE LEDGER VIEW -->
+            <section id="expenditures-section" class="content-section">
+                <div class="filter-bar">
+                    <input type="text" id="expenditure-search" class="search-input" placeholder="지출 내역 검색...">
+                    <select id="expenditure-filter-event">
+                        <option value="">모든 행사 필터</option>
+                    </select>
+                    <select id="expenditure-filter-category">
+                        <option value="">모든 분류 필터</option>
+                        <option value="학교 회비">학교 회비</option>
+                        <option value="식비">식비</option>
+                        <option value="강사료/지원비">강사료/지원비</option>
+                        <option value="간식비">간식비</option>
+                        <option value="회식">회식</option>
+                        <option value="물품비">물품비</option>
+                        <option value="운영비">운영비</option>
+                        <option value="기타">기타</option>
+                    </select>
+                    <select id="expenditure-filter-status">
+                        <option value="">모든 승인 상태</option>
+                        <option value="승인 대기">승인 대기</option>
+                        <option value="승인 완료">승인 완료</option>
+                    </select>
+                    <button class="btn btn-primary" id="add-expenditure-btn"><i class="fa-solid fa-plus"></i> 지출 직접
+                        등록</button>
+                </div>
+                <div class="glass-panel">
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>행사명</th>
+                                    <th>분류</th>
+                                    <th>내역</th>
+                                    <th>금액</th>
+                                    <th>제출자</th>
+                                    <th>증빙 영수증</th>
+                                    <th>승인 상태</th>
+                                    <th>작업</th>
+                                </tr>
+                            </thead>
+                            <tbody id="expenditure-table-body">
+                                <!-- Dynamic Data -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 5. RECEIPT GALLERY VIEW -->
+            <section id="gallery-section" class="content-section">
+                <div class="filter-bar">
+                    <select id="gallery-filter-event">
+                        <option value="">모든 행사 필터</option>
+                    </select>
+                    <select id="gallery-filter-status">
+                        <option value="">모든 승인 상태</option>
+                        <option value="승인 대기">승인 대기</option>
+                        <option value="승인 완료">승인 완료</option>
+                    </select>
+                </div>
+                <div class="gallery-grid" id="receipt-gallery-grid">
+                    <!-- Dynamic Gallery Cards -->
+                </div>
+            </section>
+
+            <!-- 5-2. SETTLEMENT REPORT VIEW -->
+            <section id="settlements-section" class="content-section">
+                <!-- Settlement summary cards -->
+                <div class="stats-grid" id="settlement-summary-cards" style="margin-bottom: 8px;">
+                    <!-- Settle summary details will go here dynamically -->
+                </div>
+                <div class="glass-panel">
+                    <div class="panel-header">
+                        <span class="panel-title"><i class="fa-solid fa-scale-unbalanced-flipped"></i> 행사별 예산 vs 실제 집행
+                            결산 대비표</span>
+                    </div>
+                    <div class="panel-body" style="padding: 0;">
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>행사명</th>
+                                        <th>진행 월</th>
+                                        <th>수입 예산 ↔ 실제 수입</th>
+                                        <th>지출 예산 ↔ 실제 지출</th>
+                                        <th>수치 대비 (차액)</th>
+                                        <th>결산 여부</th>
+                                        <th>작업</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="settlement-table-body">
+                                    <!-- Dynamic Data -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 6. EXPORT / REPORT CENTER -->
+            <section id="export-section" class="content-section">
+                <div class="export-grid">
+                    <!-- Excel Export Card -->
+                    <div class="glass-panel export-card">
+                        <i class="fa-solid fa-file-excel"></i>
+                        <h3>학교 제출 서식 엑셀 출력</h3>
+                        <p>
+                            학교 보고서 제출 서식에 호환되는 구조로 엑셀 파일을 다운로드합니다.<br>
+                            총괄표(행사별 집계), 수입 명세, 지출 명세가 포함된 다중 시트로 구성됩니다.
+                        </p>
+                        <button class="btn btn-primary" id="export-excel-btn">
+                            <i class="fa-solid fa-download"></i> 엑셀 보고서 다운로드
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- MEMBER FULLSCREEN RECEIPT SUBMISSION FORM (FORM VIEW) -->
+    <div id="member-form-layout" class="form-fullscreen">
+        <button class="back-to-admin-btn" id="close-member-form-btn">
+            <i class="fa-solid fa-arrow-left"></i> 관리자 모드로 돌아가기
+        </button>
+        <div class="glass-panel form-layout-container">
+            <div class="form-header">
+                <h2>YMC 영수증 제출 시스템</h2>
+                <p>행사별 지출 내역 및 증빙 영수증을 신속하게 업로드하세요.</p>
+            </div>
+
+            <div id="form-success-view" class="success-container">
+                <div class="success-icon">
+                    <i class="fa-solid fa-circle-check"></i>
+                </div>
+                <div class="success-title">제출이 완료되었습니다!</div>
+                <div class="success-desc">회계 담당자가 검토 후 승인을 완료할 예정입니다.</div>
+                <button class="btn btn-primary" id="form-reset-btn">
+                    <i class="fa-solid fa-redo"></i> 추가 영수증 제출하기
+                </button>
+            </div>
+
+            <form id="receipt-submit-form" onsubmit="return false;">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="form-submitter">제출자 성명 *</label>
+                        <input type="text" id="form-submitter" placeholder="예: 홍길동" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="form-event-id">연관 행사 *</label>
+                        <select id="form-event-id" required>
+                            <option value="">행사 선택...</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="form-category">지출 분류 *</label>
+                        <select id="form-category" required>
+                            <option value="">분류 선택...</option>
+                            <option value="학교 회비">학교 회비</option>
+                            <option value="식비">식비</option>
+                            <option value="강사료/지원비">강사료/지원비</option>
+                            <option value="간식비">간식비</option>
+                            <option value="회식">회식</option>
+                            <option value="물품비">물품비</option>
+                            <option value="운영비">운영비</option>
+                            <option value="기타">기타</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="form-amount">지출 금액 (₩) *</label>
+                        <input type="number" id="form-amount" placeholder="금액 입력" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="form-description">지출 내역 *</label>
+                    <input type="text" id="form-description" placeholder="예: 간식용 음료수 구매" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="form-basis">산출 근거 (수량, 단가 등)</label>
+                    <input type="text" id="form-basis" placeholder="예: 생수 10개 x 1,000원 + 콜라 5개 x 2,000원">
+                </div>
+
+                <!-- Receipt Attachment File Dropzone -->
+                <div class="form-group" style="margin-top: 8px;">
+                    <label>영수증 증빙 파일 첨부 *</label>
+                    <div class="file-dropzone" id="file-dropzone">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                        <p style="font-weight: 500; font-size: 0.9rem; margin-bottom: 4px;">파일을 드래그하여 놓거나 클릭하여 탐색</p>
+                        <p style="font-size: 0.75rem; color: var(--text-secondary);">지원 파일: PNG, JPG, JPEG, GIF, PDF (최대
+                            10MB)</p>
+                        <input type="file" id="form-receipt-file" accept="image/*, application/pdf" required>
+                    </div>
+                    <div class="file-preview" id="file-preview" style="display: none;">
+                        <img src="" alt="영수증 미리보기" id="file-preview-img">
+                        <span class="file-preview-name" id="file-preview-name">파일명.png</span>
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+                    <button class="btn btn-primary" style="width: 100%; padding: 14px;" type="submit"
+                        id="form-submit-btn">
+                        <i class="fa-solid fa-paper-plane"></i> 영수증 제출하기
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 1: ADD/EDIT EVENT -->
+    <div id="event-modal" class="modal">
+        <div class="glass-panel modal-content" style="max-width: 450px;">
+            <div class="panel-header">
+                <span class="panel-title" id="event-modal-title">행사 등록</span>
+                <i class="fa-solid fa-xmark modal-close" onclick="closeModal('event-modal')"></i>
+            </div>
+            <div class="panel-body">
+                <form id="event-form" onsubmit="return false;">
+                    <input type="hidden" id="event-modal-id">
+                    <div class="form-group">
+                        <label for="event-modal-name">행사명 *</label>
+                        <input type="text" id="event-modal-name" placeholder="행사 이름을 입력하세요 (예: 여름 수련회)" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="event-modal-month">진행 월</label>
+                        <select id="event-modal-month">
+                            <option value="">진행 월 선택...</option>
+                            <option value="1월">1월</option>
+                            <option value="2월">2월</option>
+                            <option value="3월">3월</option>
+                            <option value="4월">4월</option>
+                            <option value="5월">5월</option>
+                            <option value="6월">6월</option>
+                            <option value="7월">7월</option>
+                            <option value="8월">8월</option>
+                            <option value="9월">9월</option>
+                            <option value="10월">10월</option>
+                            <option value="11월">11월</option>
+                            <option value="12월">12월</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+                        <button class="btn btn-secondary" type="button" onclick="closeModal('event-modal')">취소</button>
+                        <button class="btn btn-primary" type="submit" id="event-form-submit-btn">저장</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 2: ADD/EDIT INCOME -->
+    <div id="income-modal" class="modal">
+        <div class="glass-panel modal-content">
+            <div class="panel-header">
+                <span class="panel-title" id="income-modal-title">수입 내역 등록</span>
+                <i class="fa-solid fa-xmark modal-close" onclick="closeModal('income-modal')"></i>
+            </div>
+            <div class="panel-body">
+                <form id="income-form" onsubmit="return false;">
+                    <input type="hidden" id="income-modal-id">
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="income-modal-event">연관 행사 *</label>
+                            <select id="income-modal-event" required>
+                                <option value="">행사 선택...</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="income-modal-category">수입 분류 *</label>
+                            <select id="income-modal-category" required>
+                                <option value="">분류 선택...</option>
+                                <option value="이월금">이월금</option>
+                                <option value="지원금">지원금</option>
+                                <option value="회비">회비</option>
+                                <option value="이자/캐시백">이자/캐시백</option>
+                                <option value="후원">후원</option>
+                                <option value="기타">기타</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="income-modal-description">내역 *</label>
+                            <input type="text" id="income-modal-description" placeholder="예: 2학기 학교 동아리 지원금" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="income-modal-amount">금액 (₩) *</label>
+                            <input type="number" id="income-modal-amount" placeholder="금액 입력" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="income-modal-basis">산출 근거</label>
+                        <input type="text" id="income-modal-basis" placeholder="예: 부원 20명 x 5,000원">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="income-modal-remarks">비고 (특이사항)</label>
+                        <textarea id="income-modal-remarks" rows="3" placeholder="기타 세부 기록이나 참고 자료 기재"></textarea>
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+                        <button class="btn btn-secondary" type="button" onclick="closeModal('income-modal')">취소</button>
+                        <button class="btn btn-primary" type="submit">저장</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 3: ADD/EDIT EXPENDITURE (ADMIN MODE) -->
+    <div id="expenditure-modal" class="modal">
+        <div class="glass-panel modal-content">
+            <div class="panel-header">
+                <span class="panel-title" id="expenditure-modal-title">지출 내역 등록</span>
+                <i class="fa-solid fa-xmark modal-close" onclick="closeModal('expenditure-modal')"></i>
+            </div>
+            <div class="panel-body">
+                <form id="expenditure-form" onsubmit="return false;">
+                    <input type="hidden" id="expenditure-modal-id">
+                    <input type="hidden" id="expenditure-modal-receipt-path">
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="expenditure-modal-submitter">제출자 성명 *</label>
+                            <input type="text" id="expenditure-modal-submitter" placeholder="예: 홍길동" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="expenditure-modal-event">연관 행사 *</label>
+                            <select id="expenditure-modal-event" required>
+                                <option value="">행사 선택...</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="expenditure-modal-category">지출 분류 *</label>
+                            <select id="expenditure-modal-category" required>
+                                <option value="">분류 선택...</option>
+                                <option value="학교 회비">학교 회비</option>
+                                <option value="식비">식비</option>
+                                <option value="강사료/지원비">강사료/지원비</option>
+                                <option value="간식비">간식비</option>
+                                <option value="회식">회식</option>
+                                <option value="물품비">물품비</option>
+                                <option value="운영비">운영비</option>
+                                <option value="기타">기타</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="expenditure-modal-amount">금액 (₩) *</label>
+                            <input type="number" id="expenditure-modal-amount" placeholder="금액 입력" required>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="expenditure-modal-description">내역 *</label>
+                            <input type="text" id="expenditure-modal-description" placeholder="예: 식재료 구입비" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="expenditure-modal-status">승인 상태 *</label>
+                            <select id="expenditure-modal-status" required>
+                                <option value="승인 대기">승인 대기</option>
+                                <option value="승인 완료">승인 완료</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="expenditure-modal-basis">산출 근거</label>
+                        <input type="text" id="expenditure-modal-basis" placeholder="예: 고기 3kg x 15,000원 + 야채 10,000원">
+                    </div>
+
+                    <!-- Receipt Attachment File Upload for Admin Edit -->
+                    <div class="form-group" style="margin-top: 8px;">
+                        <label>영수증 증빙 파일 첨부</label>
+                        <div class="file-dropzone" id="admin-file-dropzone">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                            <p style="font-weight: 500; font-size: 0.85rem; margin-bottom: 2px;">클릭하여 영수증 교체</p>
+                            <input type="file" id="expenditure-modal-file" accept="image/*, application/pdf">
+                        </div>
+                        <div class="file-preview" id="admin-file-preview" style="display: none;">
+                            <img src="" alt="영수증 미리보기" id="admin-file-preview-img">
+                            <span class="file-preview-name" id="admin-file-preview-name">파일명.png</span>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+                        <button class="btn btn-secondary" type="button"
+                            onclick="closeModal('expenditure-modal')">취소</button>
+                        <button class="btn btn-primary" type="submit">저장</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 4: RECEIPT LIGHTBOX VIEW -->
+    <div id="lightbox-modal" class="modal" onclick="closeModal('lightbox-modal')">
+        <div class="lightbox-content" onclick="event.stopPropagation()">
+            <img src="" alt="영수증 원본" id="lightbox-img" class="lightbox-img">
+            <div id="lightbox-caption" class="lightbox-caption">내역 내용</div>
+            <button class="btn btn-secondary" onclick="closeModal('lightbox-modal')"
+                style="background: rgba(255, 255, 255, 0.15); border: none;">닫기</button>
+        </div>
+    </div>
+
+    <!-- MODAL 5: ADD/EDIT BUDGET PLANNING -->
+    <div id="budget-modal" class="modal">
+        <div class="glass-panel modal-content">
+            <div class="panel-header">
+                <span class="panel-title" id="budget-modal-title">예산 계획 등록</span>
+                <i class="fa-solid fa-xmark modal-close" onclick="closeModal('budget-modal')"></i>
+            </div>
+            <div class="panel-body">
+                <form id="budget-form" onsubmit="return false;">
+                    <input type="hidden" id="budget-modal-id">
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="budget-modal-event">연관 행사 *</label>
+                            <select id="budget-modal-event" required>
+                                <option value="">행사 선택...</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="budget-modal-type">예산 구분 *</label>
+                            <select id="budget-modal-type" required>
+                                <option value="">구분 선택...</option>
+                                <option value="수입">수입 예산</option>
+                                <option value="지출">지출 예산</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="budget-modal-category">예산 분류 *</label>
+                            <select id="budget-modal-category" required>
+                                <option value="">분류 선택...</option>
+                                <option value="이월금">이월금</option>
+                                <option value="지원금">지원금</option>
+                                <option value="회비">회비</option>
+                                <option value="이자/캐시백">이자/캐시백</option>
+                                <option value="후원">후원</option>
+                                <option value="학교 회비">학교 회비</option>
+                                <option value="식비">식비</option>
+                                <option value="강사료/지원비">강사료/지원비</option>
+                                <option value="간식비">간식비</option>
+                                <option value="회식">회식</option>
+                                <option value="물품비">물품비</option>
+                                <option value="운영비">운영비</option>
+                                <option value="기타">기타</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="budget-modal-amount">예산 금액 (₩) *</label>
+                            <input type="number" id="budget-modal-amount" placeholder="금액 입력" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="budget-modal-description">예산 항목명 (내역) *</label>
+                        <input type="text" id="budget-modal-description" placeholder="예: 행사 티셔츠 대량 인쇄" required>
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+                        <button class="btn btn-secondary" type="button" onclick="closeModal('budget-modal')">취소</button>
+                        <button class="btn btn-primary" type="submit">저장</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 6: SETTLE CONFIRMATION -->
+    <div id="settle-modal" class="modal">
+        <div class="glass-panel modal-content" style="max-width: 500px;">
+            <div class="panel-header">
+                <span class="panel-title">행사 결산 확정</span>
+                <i class="fa-solid fa-xmark modal-close" onclick="closeModal('settle-modal')"></i>
+            </div>
+            <div class="panel-body">
+                <form id="settle-form" onsubmit="return false;">
+                    <input type="hidden" id="settle-modal-event-id">
+                    <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.6;">
+                        해당 행사의 예산 수립 및 실제 지출/수입 정산이 끝났음을 확정합니다. <br>
+                        결산 확정 처리된 행사는 대비표에 완료 배지가 표시됩니다.
+                    </p>
+                    <div class="form-group">
+                        <label for="settle-modal-notes">결산 총평 및 비고</label>
+                        <textarea id="settle-modal-notes" rows="4"
+                            placeholder="예: 총 예산 범위 내 지출 완료. 잔액 ₩43,500 이월 예정."></textarea>
+                    </div>
+                    <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+                        <button class="btn btn-secondary" type="button" onclick="closeModal('settle-modal')">취소</button>
+                        <button class="btn btn-primary" type="submit" id="settle-form-submit-btn"
+                            style="background: var(--success); color: white;">결산 완료 확정</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Frontend logic app.js -->
+    <script src="app.js"></script>
+</body>
+
+</html>
