@@ -245,15 +245,17 @@ class YMCApiHandler(http.server.SimpleHTTPRequestHandler):
                 amount = data.get('amount')
                 basis = data.get('basis')
                 remarks = data.get('remarks')
+                transaction_date = data.get('transaction_date')
+                payer_name = data.get('payer_name')
 
                 if not category or not description or amount is None:
                     self.send_error_response(400, "분류, 내역, 금액은 필수입니다.")
                     return
                 
                 cursor.execute("""
-                    INSERT INTO income_management (category, event_id, description, amount, basis, remarks)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (category, event_id, description, int(amount), basis, remarks))
+                    INSERT INTO income_management (category, event_id, description, amount, basis, remarks, transaction_date, payer_name)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (category, event_id, description, int(amount), basis, remarks, transaction_date, payer_name))
                 conn.commit()
                 self.send_json_response(201, {'id': cursor.lastrowid, 'status': 'success'})
 
@@ -266,15 +268,17 @@ class YMCApiHandler(http.server.SimpleHTTPRequestHandler):
                 receipt_path = data.get('receipt_path')
                 submitter = data.get('submitter')
                 status = data.get('status', '승인 대기')
+                transaction_date = data.get('transaction_date')
+                withdrawer_name = data.get('withdrawer_name') or submitter
 
                 if not category or not description or amount is None or not submitter:
                     self.send_error_response(400, "분류, 내역, 금액, 제출자는 필수입니다.")
                     return
 
                 cursor.execute("""
-                    INSERT INTO expenditure_receipt (category, event_id, description, amount, basis, receipt_path, submitter, status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (category, event_id, description, int(amount), basis, receipt_path, submitter, status))
+                    INSERT INTO expenditure_receipt (category, event_id, description, amount, basis, receipt_path, submitter, status, transaction_date, withdrawer_name)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (category, event_id, description, int(amount), basis, receipt_path, submitter, status, transaction_date, withdrawer_name))
                 conn.commit()
                 self.send_json_response(201, {'id': cursor.lastrowid, 'status': 'success'})
             
@@ -345,6 +349,8 @@ class YMCApiHandler(http.server.SimpleHTTPRequestHandler):
                 amount = data.get('amount')
                 basis = data.get('basis')
                 remarks = data.get('remarks')
+                transaction_date = data.get('transaction_date')
+                payer_name = data.get('payer_name')
 
                 if not id_ or not category or not description or amount is None:
                     self.send_error_response(400, "필수 항목이 누락되었습니다.")
@@ -352,9 +358,9 @@ class YMCApiHandler(http.server.SimpleHTTPRequestHandler):
 
                 cursor.execute("""
                     UPDATE income_management 
-                    SET category = ?, event_id = ?, description = ?, amount = ?, basis = ?, remarks = ?
+                    SET category = ?, event_id = ?, description = ?, amount = ?, basis = ?, remarks = ?, transaction_date = ?, payer_name = ?
                     WHERE id = ?
-                """, (category, event_id, description, int(amount), basis, remarks, id_))
+                """, (category, event_id, description, int(amount), basis, remarks, transaction_date, payer_name, id_))
                 conn.commit()
                 self.send_json_response(200, {'status': 'success'})
 
@@ -368,6 +374,8 @@ class YMCApiHandler(http.server.SimpleHTTPRequestHandler):
                 receipt_path = data.get('receipt_path')
                 submitter = data.get('submitter')
                 status = data.get('status')
+                transaction_date = data.get('transaction_date')
+                withdrawer_name = data.get('withdrawer_name') or submitter
 
                 if not id_ or not category or not description or amount is None or not submitter or not status:
                     self.send_error_response(400, "필수 항목이 누락되었습니다.")
@@ -375,9 +383,9 @@ class YMCApiHandler(http.server.SimpleHTTPRequestHandler):
 
                 cursor.execute("""
                     UPDATE expenditure_receipt 
-                    SET category = ?, event_id = ?, description = ?, amount = ?, basis = ?, receipt_path = ?, submitter = ?, status = ?
+                    SET category = ?, event_id = ?, description = ?, amount = ?, basis = ?, receipt_path = ?, submitter = ?, status = ?, transaction_date = ?, withdrawer_name = ?
                     WHERE id = ?
-                """, (category, event_id, description, int(amount), basis, receipt_path, submitter, status, id_))
+                """, (category, event_id, description, int(amount), basis, receipt_path, submitter, status, transaction_date, withdrawer_name, id_))
                 conn.commit()
                 self.send_json_response(200, {'status': 'success'})
 
