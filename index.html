@@ -232,6 +232,8 @@
                         <table>
                             <thead>
                                 <tr>
+                                    <th>거래일자</th>
+                                    <th>입금자명</th>
                                     <th>행사명</th>
                                     <th>분류</th>
                                     <th>내역</th>
@@ -280,6 +282,8 @@
                         <table>
                             <thead>
                                 <tr>
+                                    <th>거래일자</th>
+                                    <th>출금자명</th>
                                     <th>행사명</th>
                                     <th>분류</th>
                                     <th>내역</th>
@@ -532,6 +536,17 @@
 
                     <div class="form-row">
                         <div class="form-group">
+                            <label for="income-modal-date">거래일자 *</label>
+                            <input type="date" id="income-modal-date" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="income-modal-payer">입금자명 *</label>
+                            <input type="text" id="income-modal-payer" placeholder="예: 홍길동, 학교지원금" required>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
                             <label for="income-modal-event">연관 행사 *</label>
                             <select id="income-modal-event" required>
                                 <option value="">행사 선택...</option>
@@ -592,6 +607,17 @@
                 <form id="expenditure-form" onsubmit="return false;">
                     <input type="hidden" id="expenditure-modal-id">
                     <input type="hidden" id="expenditure-modal-receipt-path">
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="expenditure-modal-date">거래일자 *</label>
+                            <input type="date" id="expenditure-modal-date" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="expenditure-modal-withdrawer">출금자명 *</label>
+                            <input type="text" id="expenditure-modal-withdrawer" placeholder="예: 마트, 식당, 홍길동" required>
+                        </div>
+                    </div>
 
                     <div class="form-row">
                         <div class="form-group">
