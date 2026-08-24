@@ -171,17 +171,6 @@ header {
 }
 .page-title p { color: var(--text-secondary); font-size: 0.82rem; }
 
-.user-profile { display: flex; align-items: center; gap: 12px; }
-
-.user-avatar {
-    width: 38px; height: 38px; border-radius: 50%;
-    background: linear-gradient(135deg, var(--primary), #2d5279);
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 0.7rem; color: #fff;
-    box-shadow: 0 2px 8px rgba(23,54,93,0.26);
-    letter-spacing: 0.5px;
-}
-
 /* ── DASHBOARD BANNER ── */
 .dashboard-banner {
     width: 100%;
@@ -249,13 +238,8 @@ header {
 .stat-change.down { color: var(--danger); }
 
 /* ── CONTENT SECTIONS ── */
-.content-section { display: none; animation: fadeIn 0.3s ease-out; }
+.content-section { display: none; }
 .content-section.active { display: flex; flex-direction: column; gap: 18px; }
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
-}
 
 /* ── PANELS ── */
 .dashboard-details-grid {
