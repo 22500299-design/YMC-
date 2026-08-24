@@ -352,16 +352,32 @@
             <!-- 6. EXPORT / REPORT CENTER -->
             <section id="export-section" class="content-section">
                 <div class="export-grid">
-                    <!-- Excel Export Card -->
+                    <!-- Transaction Ledger Export -->
                     <div class="glass-panel export-card">
-                        <i class="fa-solid fa-file-excel"></i>
-                        <h3>학교 제출 서식 엑셀 출력</h3>
+                        <i class="fa-solid fa-table-list"></i>
+                        <h3>거래내역 장부 엑셀</h3>
                         <p>
-                            학교 보고서 제출 서식에 호환되는 구조로 엑셀 파일을 다운로드합니다.<br>
-                            총괄표(행사별 집계), 수입 명세, 지출 명세가 포함된 다중 시트로 구성됩니다.
+                            날짜순으로 수입과 지출을 한 장에 합쳐 입금액·출금액·누적 잔액을 표시합니다.
+                            첨부한 통장 장부 형식(A~H열)으로 내려받습니다.
                         </p>
-                        <button class="btn btn-primary" id="export-excel-btn">
-                            <i class="fa-solid fa-download"></i> 엑셀 보고서 다운로드
+                        <label for="export-opening-balance" style="font-size:0.82rem;font-weight:600;">기초 잔액 (선택)</label>
+                        <input type="number" id="export-opening-balance" class="search-input" value="0" step="1"
+                            placeholder="예: 739371" style="width:100%;">
+                        <button class="btn btn-primary" id="export-ledger-btn">
+                            <i class="fa-solid fa-file-excel"></i> 거래내역 장부 다운로드
+                        </button>
+                    </div>
+
+                    <!-- Settlement Report Export -->
+                    <div class="glass-panel export-card">
+                        <i class="fa-solid fa-file-word"></i>
+                        <h3>학교 제출용 결산 보고서</h3>
+                        <p>
+                            수입과 지출을 분류별로 묶고 산출근거·비고·부분계·총계를 포함한 표를
+                            Word에서 바로 열 수 있는 보고서로 내려받습니다.
+                        </p>
+                        <button class="btn btn-primary" id="export-settlement-btn">
+                            <i class="fa-solid fa-file-arrow-down"></i> 결산 보고서 다운로드
                         </button>
                     </div>
                 </div>
