@@ -5,7 +5,8 @@ import urllib.parse
 import os
 import uuid
 import shutil
-import cgi
+import email
+import email.message
 import sys
 from db import init_db, get_db_connection
 
@@ -468,41 +469,61 @@ class YMCApiHandler(http.server.SimpleHTTPRequestHandler):
     # --- Receipt Upload Handler ---
     def handle_receipt_upload(self):
         try:
-            # Parse multipart form data
-            ctype, pdict = cgi.parse_header(self.headers.get('content-type'))
+            content_type_header = self.headers.get('content-type', '')
+
+            # Parse content-type and boundary manually (replaces cgi.parse_header)
+            ct_parts = content_type_header.split(';')
+            ctype = ct_parts[0].strip()
+
             if ctype != 'multipart/form-data':
                 self.send_error_response(400, "Content-Type must be multipart/form-data")
                 return
 
-            # parse_multipart requires boundary to be bytes in python3
-            pdict['boundary'] = bytes(pdict['boundary'], "utf-8")
-            
-            # Read all request data
-            # Use content-length to prevent hang
+            boundary = None
+            for part in ct_parts[1:]:
+                part = part.strip()
+                if part.lower().startswith('boundary='):
+                    boundary = part[9:].strip('"')
+                    break
+
+            if not boundary:
+                self.send_error_response(400, "Missing boundary in Content-Type")
+                return
+
             content_length = int(self.headers.get('Content-Length', 0))
-            # Limit read to content_length
-            fields = cgi.parse_multipart(self.rfile, pdict)
-            
+            body = self.rfile.read(content_length)
+
+            # Use email module to parse multipart (replaces cgi.parse_multipart)
+            msg_bytes = ('Content-Type: ' + content_type_header + '\r\n\r\n').encode('utf-8') + body
+            msg = email.message_from_bytes(msg_bytes)
+
+            fields = {}
+            for part in msg.walk():
+                if part.get_content_maintype() == 'multipart':
+                    continue
+                name = part.get_param('name', header='content-disposition')
+                if name:
+                    if name not in fields:
+                        fields[name] = []
+                    fields[name].append(part.get_payload(decode=True))
+
             if 'receipt' not in fields:
                 self.send_error_response(400, "No receipt file found in upload")
                 return
-            
-            file_data = fields['receipt'][0] # returns bytes
-            
-            # Get original filename if provided (can extract from headers or generate)
-            # Safe unique filename generation
-            file_ext = '.jpg'
-            # Look at header if possible, else default to .jpg
+
+            file_data = fields['receipt'][0]  # bytes
+
             # Generate UUID filename
+            file_ext = '.jpg'
             filename = f"{uuid.uuid4()}{file_ext}"
             file_path = os.path.join(UPLOAD_DIR, filename)
-            
+
             with open(file_path, 'wb') as f:
                 f.write(file_data)
-                
+
             relative_url = f"/uploads/{filename}"
             self.send_json_response(200, {'receipt_path': relative_url})
-            
+
         except Exception as e:
             self.send_error_response(500, f"Upload failed: {str(e)}")
 
