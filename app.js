@@ -309,13 +309,15 @@ function renderIncomeTable() {
     });
     
     if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 40px;">조회할 수입 내역이 없습니다.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 40px;">조회할 수입 내역이 없습니다.</td></tr>`;
         return;
     }
     
     filtered.forEach(row => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
+            <td style="white-space: nowrap;">${escapeHTML(row.transaction_date || '-')}</td>
+            <td>${escapeHTML(row.payer_name || '-')}</td>
             <td style="font-weight: 500;">${escapeHTML(row.event_name || '미지정')}</td>
             <td><span class="badge" style="background: rgba(99, 102, 241, 0.15); color: var(--primary);">${escapeHTML(row.category)}</span></td>
             <td>${escapeHTML(row.description)}</td>
@@ -355,7 +357,7 @@ function renderExpenditureTable() {
     });
     
     if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 40px;">조회할 지출 내역이 없습니다.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 40px;">조회할 지출 내역이 없습니다.</td></tr>`;
         return;
     }
     
@@ -378,6 +380,8 @@ function renderExpenditureTable() {
         }
         
         tr.innerHTML = `
+            <td style="white-space: nowrap;">${escapeHTML(row.transaction_date || '-')}</td>
+            <td>${escapeHTML(row.withdrawer_name || row.submitter || '-')}</td>
             <td style="font-weight: 500;">${escapeHTML(row.event_name || '미지정')}</td>
             <td><span class="badge" style="background: rgba(236, 72, 153, 0.15); color: var(--accent);">${escapeHTML(row.category)}</span></td>
             <td>${escapeHTML(row.description)}</td>
@@ -638,6 +642,7 @@ function initEventListeners() {
         document.getElementById('income-modal-title').textContent = '수입 내역 등록';
         document.getElementById('income-modal-id').value = '';
         document.getElementById('income-form').reset();
+        document.getElementById('income-modal-date').value = new Date().toISOString().slice(0, 10);
         openModal('income-modal');
     });
 
@@ -646,12 +651,14 @@ function initEventListeners() {
         document.getElementById('expenditure-modal-id').value = '';
         document.getElementById('expenditure-modal-receipt-path').value = '';
         document.getElementById('expenditure-form').reset();
+        document.getElementById('expenditure-modal-date').value = new Date().toISOString().slice(0, 10);
         document.getElementById('admin-file-preview').style.display = 'none';
         openModal('expenditure-modal');
     });
 
-    // Excel Export Trigger
-    document.getElementById('export-excel-btn').addEventListener('click', exportToExcel);
+    // Report export triggers
+    document.getElementById('export-ledger-btn').addEventListener('click', exportTransactionLedger);
+    document.getElementById('export-settlement-btn').addEventListener('click', exportSettlementReport);
 
     // External Member Form Button trigger
     document.getElementById('open-member-form-btn').addEventListener('click', () => {
@@ -851,6 +858,8 @@ window.deleteEvent = deleteEvent;
 // 2. Income CRUD
 async function handleIncomeSubmit(e) {
     const id = document.getElementById('income-modal-id').value;
+    const transaction_date = document.getElementById('income-modal-date').value;
+    const payer_name = document.getElementById('income-modal-payer').value;
     const event_id = document.getElementById('income-modal-event').value;
     const category = document.getElementById('income-modal-category').value;
     const description = document.getElementById('income-modal-description').value;
@@ -861,6 +870,8 @@ async function handleIncomeSubmit(e) {
     const url = `${API_BASE}/income`;
     const method = id ? 'PUT' : 'POST';
     const body = {
+        transaction_date,
+        payer_name,
         category,
         event_id: event_id ? parseInt(event_id) : null,
         description,
@@ -893,6 +904,8 @@ function openEditIncome(id) {
     
     document.getElementById('income-modal-title').textContent = '수입 내역 수정';
     document.getElementById('income-modal-id').value = record.id;
+    document.getElementById('income-modal-date').value = record.transaction_date || '';
+    document.getElementById('income-modal-payer').value = record.payer_name || '';
     document.getElementById('income-modal-event').value = record.event_id || '';
     document.getElementById('income-modal-category').value = record.category;
     document.getElementById('income-modal-description').value = record.description;
@@ -921,6 +934,8 @@ window.deleteIncome = deleteIncome;
 // 3. Expenditure CRUD (Admin Portal)
 async function handleExpenditureSubmit(e) {
     const id = document.getElementById('expenditure-modal-id').value;
+    const transaction_date = document.getElementById('expenditure-modal-date').value;
+    const withdrawer_name = document.getElementById('expenditure-modal-withdrawer').value;
     const submitter = document.getElementById('expenditure-modal-submitter').value;
     const event_id = document.getElementById('expenditure-modal-event').value;
     const category = document.getElementById('expenditure-modal-category').value;
@@ -952,6 +967,8 @@ async function handleExpenditureSubmit(e) {
     const url = `${API_BASE}/expenditures`;
     const method = id ? 'PUT' : 'POST';
     const body = {
+        transaction_date,
+        withdrawer_name,
         category,
         event_id: event_id ? parseInt(event_id) : null,
         description,
@@ -988,6 +1005,8 @@ function openEditExpenditure(id) {
     
     document.getElementById('expenditure-modal-title').textContent = '지출 내역 수정';
     document.getElementById('expenditure-modal-id').value = record.id;
+    document.getElementById('expenditure-modal-date').value = record.transaction_date || '';
+    document.getElementById('expenditure-modal-withdrawer').value = record.withdrawer_name || record.submitter || '';
     document.getElementById('expenditure-modal-submitter').value = record.submitter;
     document.getElementById('expenditure-modal-event').value = record.event_id || '';
     document.getElementById('expenditure-modal-category').value = record.category;
@@ -1113,183 +1132,196 @@ function resetReceiptForm() {
     submitBtn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> 영수증 제출하기`;
 }
 
-// 5. Excel Report Generation using SheetJS
-function exportToExcel() {
-    if (events.length === 0) {
+// 5. School report exports
+
+function getExportTransactions(openingBalance = 0) {
+    const income = incomeRecords.map((row, index) => ({
+        type: 'income',
+        date: row.transaction_date || row.date || '',
+        description: row.description || row.event_name || '',
+        remarks: row.remarks || row.basis || '',
+        counterparty: row.payer_name || row.submitter || '',
+        amount: Number(row.amount || 0),
+        order: Number(row.id || index)
+    }));
+
+    const expenditures = expenditureRecords.map((row, index) => ({
+        type: 'expenditure',
+        date: row.transaction_date || row.date || '',
+        description: row.description || row.event_name || '',
+        remarks: row.basis || '',
+        counterparty: row.withdrawer_name || row.submitter || '',
+        amount: Number(row.amount || 0),
+        order: Number(row.id || index)
+    }));
+
+    const transactions = [...income, ...expenditures].sort((a, b) => {
+        if (a.date && b.date && a.date !== b.date) return a.date.localeCompare(b.date);
+        if (a.date && !b.date) return -1;
+        if (!a.date && b.date) return 1;
+        return a.order - b.order;
+    });
+
+    let balance = Number(openingBalance || 0);
+    return transactions.map(row => {
+        balance += row.type === 'income' ? row.amount : -row.amount;
+        return { ...row, balance };
+    });
+}
+
+function exportTransactionLedger() {
+    if (incomeRecords.length === 0 && expenditureRecords.length === 0) {
         showToast('출력할 회계 내역이 없습니다.', 'error');
         return;
     }
 
     try {
+        const openingBalance = Number(document.getElementById('export-opening-balance').value || 0);
+        const transactions = getExportTransactions(openingBalance);
+        const rows = [
+            ['날짜', '내용', '비고', '입금자명', '입금액', '출금자명', '출금액', '잔액']
+        ];
+
+        if (openingBalance !== 0) {
+            rows.push(['', '기초 잔액(이월금)', '', '', '', '', '', openingBalance]);
+        }
+
+        transactions.forEach(row => {
+            rows.push([
+                row.date,
+                row.description,
+                row.remarks,
+                row.type === 'income' ? row.counterparty : '',
+                row.type === 'income' ? row.amount : '',
+                row.type === 'expenditure' ? row.counterparty : '',
+                row.type === 'expenditure' ? row.amount : '',
+                row.balance
+            ]);
+        });
+
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        ws['!cols'] = [
+            { wch: 13 }, { wch: 32 }, { wch: 24 }, { wch: 16 },
+            { wch: 15 }, { wch: 16 }, { wch: 15 }, { wch: 17 }
+        ];
+        ws['!autofilter'] = { ref: `A1:H${rows.length}` };
+        ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+        for (let r = 2; r <= rows.length; r += 1) {
+            ['E', 'G', 'H'].forEach(col => {
+                const cell = ws[`${col}${r}`];
+                if (cell && typeof cell.v === 'number') cell.z = '₩#,##0;[Red]-₩#,##0';
+            });
+        }
+
         const wb = XLSX.utils.book_new();
-
-        // --- SHEET 1: 총괄표 (Summary) ---
-        const summaryRows = [
-            ["YMC 대학동아리 행사별 예산 및 결산 총괄표"],
-            [`출력일자: ${new Date().toLocaleDateString('ko-KR')}`],
-            [],
-            ["행사명", "진행 월", "예산 (수입 합계)", "결산 (지출 집행액)", "잔액 (수입 - 지출)", "집행률 (%)"]
-        ];
-
-        let totalIncome = 0;
-        let totalExpenditure = 0;
-
-        // Calculate event wise sum
-        const eventWiseData = events.map(event => {
-            const incSum = incomeRecords
-                .filter(r => r.event_id === event.id)
-                .reduce((sum, r) => sum + r.amount, 0);
-            
-            const expSum = expenditureRecords
-                .filter(r => r.event_id === event.id)
-                .reduce((sum, r) => sum + r.amount, 0);
-                
-            totalIncome += incSum;
-            totalExpenditure += expSum;
-
-            const bal = incSum - expSum;
-            const executionRate = incSum > 0 ? Math.round((expSum / incSum) * 100) : (expSum > 0 ? 100 : 0);
-
-            return [
-                event.name,
-                event.month || "미지정",
-                incSum,
-                expSum,
-                bal,
-                `${executionRate}%`
-            ];
-        });
-
-        // Push event rows
-        summaryRows.push(...eventWiseData);
-        
-        // Push Grand Total Row
-        const grandTotalBal = totalIncome - totalExpenditure;
-        const grandRate = totalIncome > 0 ? Math.round((totalExpenditure / totalIncome) * 100) : (totalExpenditure > 0 ? 100 : 0);
-        summaryRows.push([
-            "총계 (Grand Total)",
-            "",
-            totalIncome,
-            totalExpenditure,
-            grandTotalBal,
-            `${grandRate}%`
-        ]);
-
-        const ws1 = XLSX.utils.aoa_to_sheet(summaryRows);
-        XLSX.utils.book_append_sheet(wb, ws1, "행사별 총괄표");
-
-        // --- SHEET 2: 수입 명세 (Income Details) ---
-        const incomeRows = [
-            ["YMC 동아리 수입 상세 내역서 (학교 제출용)"],
-            [`출력일자: ${new Date().toLocaleDateString('ko-KR')}`],
-            [],
-            ["연관 행사명", "분류", "수입 내역", "금액 (₩)", "산출 근거", "비고"]
-        ];
-
-        incomeRecords.forEach(r => {
-            incomeRows.push([
-                r.event_name || "미지정",
-                r.category,
-                r.description,
-                r.amount,
-                r.basis || "",
-                r.remarks || ""
-            ]);
-        });
-
-        // Add total row at bottom
-        incomeRows.push([
-            "수입 총합계",
-            "",
-            "",
-            totalIncome,
-            "",
-            ""
-        ]);
-
-        const ws2 = XLSX.utils.aoa_to_sheet(incomeRows);
-        XLSX.utils.book_append_sheet(wb, ws2, "수입 명세");
-
-        // --- SHEET 3: 지출 및 영수증 명세 (Expenditure Details) ---
-        const expenditureRows = [
-            ["YMC 동아리 지출 및 영수증 증빙 상세 내역서 (학교 제출용)"],
-            [`출력일자: ${new Date().toLocaleDateString('ko-KR')}`],
-            [],
-            ["연관 행사명", "분류", "지출 내역", "금액 (₩)", "산출 근거", "제출자", "증빙 영수증", "확인 상태"]
-        ];
-
-        expenditureRecords.forEach(r => {
-            expenditureRows.push([
-                r.event_name || "미지정",
-                r.category,
-                r.description,
-                r.amount,
-                r.basis || "",
-                r.submitter,
-                r.receipt_path ? "영수증 첨부완료" : "영수증 미첨부",
-                r.status
-            ]);
-        });
-
-        // Add total row at bottom
-        expenditureRows.push([
-            "지출 총합계",
-            "",
-            "",
-            totalExpenditure,
-            "",
-            "",
-            "",
-            ""
-        ]);
-
-        const ws3 = XLSX.utils.aoa_to_sheet(expenditureRows);
-        XLSX.utils.book_append_sheet(wb, ws3, "지출 명세");
-
-        // Set column widths for better readability
-        const wscols1 = [
-            { wch: 25 }, // 행사명
-            { wch: 10 }, // 진행 월
-            { wch: 18 }, // 예산
-            { wch: 18 }, // 결산
-            { wch: 18 }, // 잔액
-            { wch: 12 }  // 집행률
-        ];
-        ws1['!cols'] = wscols1;
-        
-        const wscols2 = [
-            { wch: 25 }, // 연관 행사명
-            { wch: 12 }, // 분류
-            { wch: 30 }, // 수입 내역
-            { wch: 18 }, // 금액
-            { wch: 30 }, // 산출 근거
-            { wch: 20 }  // 비고
-        ];
-        ws2['!cols'] = wscols2;
-
-        const wscols3 = [
-            { wch: 25 }, // 연관 행사명
-            { wch: 12 }, // 분류
-            { wch: 30 }, // 지출 내역
-            { wch: 18 }, // 금액
-            { wch: 30 }, // 산출 근거
-            { wch: 12 }, // 제출자
-            { wch: 15 }, // 증빙 영수증
-            { wch: 12 }  // 확인 상태
-        ];
-        ws3['!cols'] = wscols3;
-
-        // Generate Filename
-        const dateStr = new Date().toISOString().split('T')[0];
-        const filename = `YMC_회계보고서_${dateStr}.xlsx`;
-
-        // Write and Trigger Download
-        XLSX.writeFile(wb, filename);
-        showToast('엑셀 보고서가 다운로드되었습니다.', 'success');
-
+        XLSX.utils.book_append_sheet(wb, ws, '거래내역 장부');
+        const dateStr = new Date().toISOString().slice(0, 10);
+        XLSX.writeFile(wb, `YMC_거래내역장부_${dateStr}.xlsx`);
+        showToast('거래내역 장부가 다운로드되었습니다.', 'success');
     } catch (err) {
-        showToast('엑셀 변환 중 실패했습니다.', 'error');
         console.error(err);
+        showToast('거래내역 장부 생성에 실패했습니다.', 'error');
+    }
+}
+
+function groupReportRows(records) {
+    return records.reduce((groups, row) => {
+        const category = row.category || '기타';
+        if (!groups[category]) groups[category] = [];
+        groups[category].push(row);
+        return groups;
+    }, {});
+}
+
+function reportTableHtml(title, records) {
+    const groups = groupReportRows(records);
+    let total = 0;
+    let body = '';
+
+    Object.entries(groups).forEach(([category, rows]) => {
+        let subtotal = 0;
+        rows.forEach((row, index) => {
+            const amount = Number(row.amount || 0);
+            subtotal += amount;
+            total += amount;
+            body += `<tr>
+                ${index === 0 ? `<td rowspan="${rows.length + 1}">${escapeHTML(category)}</td>` : ''}
+                <td>${escapeHTML(row.description || '')}</td>
+                <td class="money">₩${amount.toLocaleString('ko-KR')}</td>
+                <td>${escapeHTML(row.basis || '')}</td>
+                <td>${escapeHTML(row.remarks || (row.status ? `${row.submitter || ''} / ${row.status}` : ''))}</td>
+            </tr>`;
+        });
+        body += `<tr class="subtotal"><td>부분계</td><td class="money">₩${subtotal.toLocaleString('ko-KR')}</td><td></td><td></td></tr>`;
+    });
+
+    if (records.length === 0) {
+        body = '<tr><td colspan="5" class="empty">내역 없음</td></tr>';
+    }
+
+    return `<h2>&lt;${title}&gt;</h2>
+        <table>
+            <thead><tr><th>분류</th><th>내역</th><th>금액</th><th>산출근거</th><th>비고</th></tr></thead>
+            <tbody>${body}
+                <tr class="total"><td colspan="2">총계</td><td class="money">₩${total.toLocaleString('ko-KR')}</td><td></td><td></td></tr>
+            </tbody>
+        </table>`;
+}
+
+function exportSettlementReport() {
+    if (incomeRecords.length === 0 && expenditureRecords.length === 0) {
+        showToast('출력할 회계 내역이 없습니다.', 'error');
+        return;
+    }
+
+    try {
+        const totalIncome = incomeRecords.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+        const totalExpenditure = expenditureRecords.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+        const balance = totalIncome - totalExpenditure;
+        const reportDate = new Date().toLocaleDateString('ko-KR');
+
+        const documentHtml = `<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"><title>YMC 결산 보고서</title>
+<style>
+@page { size: A4; margin: 18mm; }
+body { font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; color:#111; font-size:10.5pt; }
+h1 { text-align:center; font-size:20pt; margin:0 0 8px; }
+.meta { text-align:right; margin-bottom:20px; color:#444; }
+.summary { margin:0 0 22px; padding:12px; border:1px solid #777; }
+h2 { font-size:13pt; margin:22px 0 7px; }
+table { width:100%; border-collapse:collapse; table-layout:fixed; }
+th, td { border:1px solid #555; padding:6px 7px; vertical-align:middle; word-break:keep-all; }
+th { background:#e7e7e7; text-align:center; }
+th:nth-child(1) { width:14%; } th:nth-child(2) { width:25%; } th:nth-child(3) { width:15%; }
+th:nth-child(4) { width:27%; } th:nth-child(5) { width:19%; }
+.money { text-align:right; white-space:nowrap; }
+.subtotal { font-weight:bold; background:#f3f3f3; }
+.total { font-weight:bold; background:#d9d9d9; }
+.empty { text-align:center; color:#666; padding:18px; }
+</style></head><body>
+<h1>YMC 동아리 활동 결산 보고서</h1>
+<div class="meta">출력일자: ${reportDate}</div>
+<div class="summary"><strong>수입 총계</strong> ₩${totalIncome.toLocaleString('ko-KR')}
+&nbsp;&nbsp; / &nbsp;&nbsp;<strong>지출 총계</strong> ₩${totalExpenditure.toLocaleString('ko-KR')}
+&nbsp;&nbsp; / &nbsp;&nbsp;<strong>잔액</strong> ₩${balance.toLocaleString('ko-KR')}</div>
+${reportTableHtml('수입', incomeRecords)}
+${reportTableHtml('지출', expenditureRecords)}
+</body></html>`;
+
+        const blob = new Blob(['\ufeff', documentHtml], { type: 'application/msword;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        const dateStr = new Date().toISOString().slice(0, 10);
+        link.href = url;
+        link.download = `YMC_결산보고서_${dateStr}.doc`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        showToast('학교 제출용 결산 보고서가 다운로드되었습니다.', 'success');
+    } catch (err) {
+        console.error(err);
+        showToast('결산 보고서 생성에 실패했습니다.', 'error');
     }
 }
 

@@ -135,6 +135,8 @@ def init_db():
         amount INTEGER NOT NULL,
         basis TEXT,
         remarks TEXT,
+        transaction_date TEXT,
+        payer_name TEXT,
         FOREIGN KEY (event_id) REFERENCES event_master(id) ON DELETE SET NULL
     )
     ''')
@@ -151,6 +153,8 @@ def init_db():
         receipt_path TEXT,
         submitter TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT '승인 대기',
+        transaction_date TEXT,
+        withdrawer_name TEXT,
         FOREIGN KEY (event_id) REFERENCES event_master(id) ON DELETE SET NULL
     )
     ''')
@@ -168,20 +172,28 @@ def init_db():
     )
     ''')
     
-    # Handle DB Migrations for existing databases (SQLite only)
-    if not DATABASE_URL:
-        columns = [
-            ('is_settled', 'INTEGER DEFAULT 0'),
-            ('settled_date', 'TEXT'),
-            ('settlement_notes', 'TEXT')
-        ]
-        for col_name, col_type in columns:
-            try:
-                cursor.execute(f"ALTER TABLE event_master ADD COLUMN {col_name} {col_type}")
-            except sqlite3.OperationalError:
-                # Column already exists
-                pass
-    
+    # Handle DB migrations without deleting existing accounting data
+    if DATABASE_URL:
+        cursor.execute("ALTER TABLE income_management ADD COLUMN IF NOT EXISTS transaction_date TEXT")
+        cursor.execute("ALTER TABLE income_management ADD COLUMN IF NOT EXISTS payer_name TEXT")
+        cursor.execute("ALTER TABLE expenditure_receipt ADD COLUMN IF NOT EXISTS transaction_date TEXT")
+        cursor.execute("ALTER TABLE expenditure_receipt ADD COLUMN IF NOT EXISTS withdrawer_name TEXT")
+        cursor.execute("ALTER TABLE event_master ADD COLUMN IF NOT EXISTS is_settled INTEGER DEFAULT 0")
+        cursor.execute("ALTER TABLE event_master ADD COLUMN IF NOT EXISTS settled_date TEXT")
+        cursor.execute("ALTER TABLE event_master ADD COLUMN IF NOT EXISTS settlement_notes TEXT")
+    else:
+        migrations = {
+            'event_master': [('is_settled', 'INTEGER DEFAULT 0'), ('settled_date', 'TEXT'), ('settlement_notes', 'TEXT')],
+            'income_management': [('transaction_date', 'TEXT'), ('payer_name', 'TEXT')],
+            'expenditure_receipt': [('transaction_date', 'TEXT'), ('withdrawer_name', 'TEXT')]
+        }
+        for table_name, columns in migrations.items():
+            for col_name, col_type in columns:
+                try:
+                    cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_type}")
+                except sqlite3.OperationalError:
+                    pass
+
     # Insert default rows for Event Master if empty
     cursor.execute("SELECT COUNT(*) FROM event_master")
     if cursor.fetchone()[0] == 0:
