@@ -23,10 +23,13 @@
     <!-- MAIN APP LAYOUT (ADMIN DASHBOARD) -->
     <div id="app-layout">
         <!-- Sidebar Navigation -->
-        <aside>
+        <aside id="sidebar">
             <div class="brand">
                 <div class="brand-logo">Y</div>
                 <div class="brand-name">YMC 회계관리</div>
+                <button class="mobile-nav-close" id="mobile-nav-close" type="button" aria-label="메뉴 닫기">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
             </div>
             <nav>
                 <a class="nav-item active" data-target="dashboard">
@@ -59,11 +62,16 @@
                 </button>
             </nav>
         </aside>
+        <div class="sidebar-backdrop" id="sidebar-backdrop" aria-hidden="true"></div>
 
         <!-- Main Workspace Area -->
         <main>
             <!-- Header -->
             <header>
+                <button class="mobile-menu-btn" id="mobile-menu-btn" type="button" aria-label="메뉴 열기"
+                    aria-controls="sidebar" aria-expanded="false">
+                    <i class="fa-solid fa-bars"></i>
+                </button>
                 <div class="page-title">
                     <h1 id="view-title">대시보드</h1>
                     <p id="view-subtitle">동아리 회계 정보 통합 대시보드</p>
