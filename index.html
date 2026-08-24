@@ -86,7 +86,7 @@
                             <span>총 수입 (예산)</span>
                             <i class="fa-solid fa-arrow-trend-up"></i>
                         </div>
-                        <div class="stat-value" id="stat-total-income">₩0</div>
+                        <div class="stat-value" id="stat-total-income">0원</div>
                         <div class="stat-change up"><i class="fa-solid fa-circle-check"></i> 실시간 반영</div>
                     </div>
                     <div class="stat-card glass-panel" style="--card-color: var(--secondary);">
@@ -94,7 +94,7 @@
                             <span>총 지출 (결산)</span>
                             <i class="fa-solid fa-arrow-trend-down"></i>
                         </div>
-                        <div class="stat-value" id="stat-total-expenditure">₩0</div>
+                        <div class="stat-value" id="stat-total-expenditure">0원</div>
                         <div class="stat-change down"><i class="fa-solid fa-receipt"></i> 영수증 증빙 기준</div>
                     </div>
                     <div class="stat-card glass-panel" style="--card-color: var(--accent);">
@@ -102,7 +102,7 @@
                             <span>현재 잔액</span>
                             <i class="fa-solid fa-scale-balanced"></i>
                         </div>
-                        <div class="stat-value" id="stat-balance">₩0</div>
+                        <div class="stat-value" id="stat-balance">0원</div>
                         <div class="stat-change" id="balance-change-indicator" style="color: var(--secondary);">
                             <i class="fa-solid fa-wallet"></i> 동아리 가용 예산
                         </div>
@@ -364,7 +364,7 @@
                             날짜순으로 수입과 지출을 한 장에 합쳐 입금액·출금액·누적 잔액을 표시합니다.
                             첨부한 통장 장부 형식(A~H열)으로 내려받습니다.
                         </p>
-                        <label for="export-opening-balance" style="font-size:0.82rem;font-weight:600;">기초 잔액 (선택)</label>
+                        <label for="export-opening-balance" style="font-size:0.82rem;font-weight:600;">기초 잔액 (원, 선택)</label>
                         <input type="number" id="export-opening-balance" class="search-input" value="0" step="1"
                             placeholder="예: 739371" style="width:100%;">
                         <button class="btn btn-primary" id="export-ledger-btn">
@@ -441,7 +441,7 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label for="form-amount">지출 금액 (₩) *</label>
+                        <label for="form-amount">지출 금액 (원) *</label>
                         <input type="number" id="form-amount" placeholder="금액 입력" required>
                     </div>
                 </div>
@@ -572,7 +572,7 @@
                             <input type="text" id="income-modal-description" placeholder="예: 2학기 학교 동아리 지원금" required>
                         </div>
                         <div class="form-group">
-                            <label for="income-modal-amount">금액 (₩) *</label>
+                            <label for="income-modal-amount">금액 (원) *</label>
                             <input type="number" id="income-modal-amount" placeholder="금액 입력" required>
                         </div>
                     </div>
@@ -648,7 +648,7 @@
                             </select>
                         </div>
                         <div class="form-group">
-                            <label for="expenditure-modal-amount">금액 (₩) *</label>
+                            <label for="expenditure-modal-amount">금액 (원) *</label>
                             <input type="number" id="expenditure-modal-amount" placeholder="금액 입력" required>
                         </div>
                     </div>
@@ -755,7 +755,7 @@
                             </select>
                         </div>
                         <div class="form-group">
-                            <label for="budget-modal-amount">예산 금액 (₩) *</label>
+                            <label for="budget-modal-amount">예산 금액 (원) *</label>
                             <input type="number" id="budget-modal-amount" placeholder="금액 입력" required>
                         </div>
                     </div>
@@ -791,7 +791,7 @@
                     <div class="form-group">
                         <label for="settle-modal-notes">결산 총평 및 비고</label>
                         <textarea id="settle-modal-notes" rows="4"
-                            placeholder="예: 총 예산 범위 내 지출 완료. 잔액 ₩43,500 이월 예정."></textarea>
+                            placeholder="예: 총 예산 범위 내 지출 완료. 잔액 43,500원 이월 예정."></textarea>
                     </div>
                     <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
                         <button class="btn btn-secondary" type="button" onclick="closeModal('settle-modal')">취소</button>
