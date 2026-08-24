@@ -309,13 +309,15 @@ function renderIncomeTable() {
     });
     
     if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 40px;">조회할 수입 내역이 없습니다.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 40px;">조회할 수입 내역이 없습니다.</td></tr>`;
         return;
     }
     
     filtered.forEach(row => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
+            <td style="white-space: nowrap;">${escapeHTML(row.transaction_date || '-')}</td>
+            <td>${escapeHTML(row.payer_name || '-')}</td>
             <td style="font-weight: 500;">${escapeHTML(row.event_name || '미지정')}</td>
             <td><span class="badge" style="background: rgba(99, 102, 241, 0.15); color: var(--primary);">${escapeHTML(row.category)}</span></td>
             <td>${escapeHTML(row.description)}</td>
@@ -355,7 +357,7 @@ function renderExpenditureTable() {
     });
     
     if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 40px;">조회할 지출 내역이 없습니다.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 40px;">조회할 지출 내역이 없습니다.</td></tr>`;
         return;
     }
     
@@ -378,6 +380,8 @@ function renderExpenditureTable() {
         }
         
         tr.innerHTML = `
+            <td style="white-space: nowrap;">${escapeHTML(row.transaction_date || '-')}</td>
+            <td>${escapeHTML(row.withdrawer_name || row.submitter || '-')}</td>
             <td style="font-weight: 500;">${escapeHTML(row.event_name || '미지정')}</td>
             <td><span class="badge" style="background: rgba(236, 72, 153, 0.15); color: var(--accent);">${escapeHTML(row.category)}</span></td>
             <td>${escapeHTML(row.description)}</td>
@@ -638,6 +642,7 @@ function initEventListeners() {
         document.getElementById('income-modal-title').textContent = '수입 내역 등록';
         document.getElementById('income-modal-id').value = '';
         document.getElementById('income-form').reset();
+        document.getElementById('income-modal-date').value = new Date().toISOString().slice(0, 10);
         openModal('income-modal');
     });
 
@@ -646,6 +651,7 @@ function initEventListeners() {
         document.getElementById('expenditure-modal-id').value = '';
         document.getElementById('expenditure-modal-receipt-path').value = '';
         document.getElementById('expenditure-form').reset();
+        document.getElementById('expenditure-modal-date').value = new Date().toISOString().slice(0, 10);
         document.getElementById('admin-file-preview').style.display = 'none';
         openModal('expenditure-modal');
     });
@@ -852,6 +858,8 @@ window.deleteEvent = deleteEvent;
 // 2. Income CRUD
 async function handleIncomeSubmit(e) {
     const id = document.getElementById('income-modal-id').value;
+    const transaction_date = document.getElementById('income-modal-date').value;
+    const payer_name = document.getElementById('income-modal-payer').value;
     const event_id = document.getElementById('income-modal-event').value;
     const category = document.getElementById('income-modal-category').value;
     const description = document.getElementById('income-modal-description').value;
@@ -862,6 +870,8 @@ async function handleIncomeSubmit(e) {
     const url = `${API_BASE}/income`;
     const method = id ? 'PUT' : 'POST';
     const body = {
+        transaction_date,
+        payer_name,
         category,
         event_id: event_id ? parseInt(event_id) : null,
         description,
@@ -894,6 +904,8 @@ function openEditIncome(id) {
     
     document.getElementById('income-modal-title').textContent = '수입 내역 수정';
     document.getElementById('income-modal-id').value = record.id;
+    document.getElementById('income-modal-date').value = record.transaction_date || '';
+    document.getElementById('income-modal-payer').value = record.payer_name || '';
     document.getElementById('income-modal-event').value = record.event_id || '';
     document.getElementById('income-modal-category').value = record.category;
     document.getElementById('income-modal-description').value = record.description;
@@ -922,6 +934,8 @@ window.deleteIncome = deleteIncome;
 // 3. Expenditure CRUD (Admin Portal)
 async function handleExpenditureSubmit(e) {
     const id = document.getElementById('expenditure-modal-id').value;
+    const transaction_date = document.getElementById('expenditure-modal-date').value;
+    const withdrawer_name = document.getElementById('expenditure-modal-withdrawer').value;
     const submitter = document.getElementById('expenditure-modal-submitter').value;
     const event_id = document.getElementById('expenditure-modal-event').value;
     const category = document.getElementById('expenditure-modal-category').value;
@@ -953,6 +967,8 @@ async function handleExpenditureSubmit(e) {
     const url = `${API_BASE}/expenditures`;
     const method = id ? 'PUT' : 'POST';
     const body = {
+        transaction_date,
+        withdrawer_name,
         category,
         event_id: event_id ? parseInt(event_id) : null,
         description,
@@ -989,6 +1005,8 @@ function openEditExpenditure(id) {
     
     document.getElementById('expenditure-modal-title').textContent = '지출 내역 수정';
     document.getElementById('expenditure-modal-id').value = record.id;
+    document.getElementById('expenditure-modal-date').value = record.transaction_date || '';
+    document.getElementById('expenditure-modal-withdrawer').value = record.withdrawer_name || record.submitter || '';
     document.getElementById('expenditure-modal-submitter').value = record.submitter;
     document.getElementById('expenditure-modal-event').value = record.event_id || '';
     document.getElementById('expenditure-modal-category').value = record.category;
