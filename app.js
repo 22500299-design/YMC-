@@ -39,7 +39,9 @@ function showToast(message, type = 'info') {
 
 // Format Currency
 function formatCurrency(amount) {
-    return '₩' + Number(amount || 0).toLocaleString('ko-KR');
+    const value = Number(amount);
+    const normalizedAmount = Number.isFinite(value) ? value : 0;
+    return `${normalizedAmount.toLocaleString('ko-KR')}원`;
 }
 
 // Initialize Application
@@ -1179,7 +1181,7 @@ function exportTransactionLedger() {
         const openingBalance = Number(document.getElementById('export-opening-balance').value || 0);
         const transactions = getExportTransactions(openingBalance);
         const rows = [
-            ['날짜', '내용', '비고', '입금자명', '입금액', '출금자명', '출금액', '잔액']
+            ['날짜', '내용', '비고', '입금자명', '입금액(원)', '출금자명', '출금액(원)', '잔액(원)']
         ];
 
         if (openingBalance !== 0) {
@@ -1209,7 +1211,7 @@ function exportTransactionLedger() {
         for (let r = 2; r <= rows.length; r += 1) {
             ['E', 'G', 'H'].forEach(col => {
                 const cell = ws[`${col}${r}`];
-                if (cell && typeof cell.v === 'number') cell.z = '₩#,##0;[Red]-₩#,##0';
+                if (cell && typeof cell.v === 'number') cell.z = '#,##0"원";[Red]-#,##0"원"';
             });
         }
 
@@ -1247,12 +1249,12 @@ function reportTableHtml(title, records) {
             body += `<tr>
                 ${index === 0 ? `<td rowspan="${rows.length + 1}">${escapeHTML(category)}</td>` : ''}
                 <td>${escapeHTML(row.description || '')}</td>
-                <td class="money">₩${amount.toLocaleString('ko-KR')}</td>
+                <td class="money">${formatCurrency(amount)}</td>
                 <td>${escapeHTML(row.basis || '')}</td>
                 <td>${escapeHTML(row.remarks || (row.status ? `${row.submitter || ''} / ${row.status}` : ''))}</td>
             </tr>`;
         });
-        body += `<tr class="subtotal"><td>부분계</td><td class="money">₩${subtotal.toLocaleString('ko-KR')}</td><td></td><td></td></tr>`;
+        body += `<tr class="subtotal"><td>부분계</td><td class="money">${formatCurrency(subtotal)}</td><td></td><td></td></tr>`;
     });
 
     if (records.length === 0) {
@@ -1263,7 +1265,7 @@ function reportTableHtml(title, records) {
         <table>
             <thead><tr><th>분류</th><th>내역</th><th>금액</th><th>산출근거</th><th>비고</th></tr></thead>
             <tbody>${body}
-                <tr class="total"><td colspan="2">총계</td><td class="money">₩${total.toLocaleString('ko-KR')}</td><td></td><td></td></tr>
+                <tr class="total"><td colspan="2">총계</td><td class="money">${formatCurrency(total)}</td><td></td><td></td></tr>
             </tbody>
         </table>`;
 }
@@ -1301,9 +1303,9 @@ th:nth-child(4) { width:27%; } th:nth-child(5) { width:19%; }
 </style></head><body>
 <h1>YMC 동아리 활동 결산 보고서</h1>
 <div class="meta">출력일자: ${reportDate}</div>
-<div class="summary"><strong>수입 총계</strong> ₩${totalIncome.toLocaleString('ko-KR')}
-&nbsp;&nbsp; / &nbsp;&nbsp;<strong>지출 총계</strong> ₩${totalExpenditure.toLocaleString('ko-KR')}
-&nbsp;&nbsp; / &nbsp;&nbsp;<strong>잔액</strong> ₩${balance.toLocaleString('ko-KR')}</div>
+<div class="summary"><strong>수입 총계</strong> ${formatCurrency(totalIncome)}
+&nbsp;&nbsp; / &nbsp;&nbsp;<strong>지출 총계</strong> ${formatCurrency(totalExpenditure)}
+&nbsp;&nbsp; / &nbsp;&nbsp;<strong>잔액</strong> ${formatCurrency(balance)}</div>
 ${reportTableHtml('수입', incomeRecords)}
 ${reportTableHtml('지출', expenditureRecords)}
 </body></html>`;
