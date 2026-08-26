@@ -22,6 +22,10 @@ class YMCApiHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        # Revalidate frontend files so a new HTML file is never mixed with stale JS/CSS.
+        request_path = urllib.parse.urlparse(self.path).path
+        if request_path == '/' or request_path.endswith(('.html', '.js', '.css')):
+            self.send_header('Cache-Control', 'no-cache, must-revalidate')
         super().end_headers()
 
     def do_OPTIONS(self):
