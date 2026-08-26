@@ -183,7 +183,7 @@
             <!-- 2-2. BUDGET PLANNING VIEW -->
             <section id="budgets-section" class="content-section">
                 <div class="filter-bar">
-                    <input type="text" id="budget-search" class="search-input" placeholder="예산 계획 검색...">
+                    <input type="text" id="budget-search" class="search-input" placeholder="행사명·항목·분류 검색...">
                     <select id="budget-filter-event">
                         <option value="">모든 행사 필터</option>
                     </select>
@@ -195,24 +195,12 @@
                     <button class="btn btn-primary" id="add-budget-btn"><i class="fa-solid fa-plus"></i> 예산 계획
                         등록</button>
                 </div>
-                <div class="glass-panel">
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>행사명</th>
-                                    <th>구분</th>
-                                    <th>분류</th>
-                                    <th>예산 항목명</th>
-                                    <th>예산 금액</th>
-                                    <th>작업</th>
-                                </tr>
-                            </thead>
-                            <tbody id="budget-table-body">
-                                <!-- Dynamic Data -->
-                            </tbody>
-                        </table>
-                    </div>
+                <div class="budget-guide">
+                    <i class="fa-solid fa-circle-info"></i>
+                    행사별로 항목과 수량·산출근거, 예상 비용을 입력하면 총 예산이 자동으로 계산됩니다.
+                </div>
+                <div id="budget-plan-grid" class="budget-plan-grid">
+                    <!-- Dynamic event budget cards -->
                 </div>
             </section>
 
@@ -769,7 +757,12 @@
 
                     <div class="form-group">
                         <label for="budget-modal-description">예산 항목명 (내역) *</label>
-                        <input type="text" id="budget-modal-description" placeholder="예: 행사 티셔츠 대량 인쇄" required>
+                        <input type="text" id="budget-modal-description" placeholder="예: 고기, 응원카드, 립톤" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="budget-modal-details">수량·산출근거</label>
+                        <input type="text" id="budget-modal-details" placeholder="예: 5kg / 300개 / 1.5kg × 4개">
                     </div>
 
                     <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">

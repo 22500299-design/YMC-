@@ -175,10 +175,12 @@ function closeFullscreenForm() {
 // Data Fetching Functions
 async function fetchAllData() {
     try {
+        // Events must load first because the other views render event names/dropdowns.
+        await fetchEvents();
         await Promise.all([
-            fetchEvents(),
             fetchIncome(),
             fetchExpenditures(),
+            fetchBudgets(),
             fetchDashboardStats()
         ]);
     } catch (err) {
@@ -323,6 +325,98 @@ function populateEventDropdowns() {
             option.textContent = event.name;
             dropdown.appendChild(option);
         });
+    });
+}
+
+// Render event-based budget proposal cards
+function renderBudgetTable() {
+    const container = document.getElementById('budget-plan-grid');
+    const searchVal = document.getElementById('budget-search').value.trim().toLowerCase();
+    const filterEvent = document.getElementById('budget-filter-event').value;
+    const filterType = document.getElementById('budget-filter-type').value;
+
+    container.innerHTML = '';
+
+    const visibleEvents = events.filter(event => {
+        if (filterEvent && String(event.id) !== filterEvent) return false;
+        const rows = budgetRecords.filter(row => Number(row.event_id) === Number(event.id));
+        if (!searchVal) return true;
+        return event.name.toLowerCase().includes(searchVal) || rows.some(row =>
+            [row.description, row.details, row.category, row.type]
+                .some(value => String(value || '').toLowerCase().includes(searchVal))
+        );
+    });
+
+    if (visibleEvents.length === 0) {
+        container.innerHTML = `<div class="glass-panel budget-empty-state">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <strong>조건에 맞는 예산안이 없습니다.</strong>
+            <span>검색 조건을 바꾸거나 새 예산 항목을 등록해 주세요.</span>
+        </div>`;
+        return;
+    }
+
+    visibleEvents.forEach(event => {
+        const allEventRows = budgetRecords.filter(row => Number(row.event_id) === Number(event.id));
+        const rows = allEventRows.filter(row => {
+            const matchesType = !filterType || row.type === filterType;
+            const matchesSearch = !searchVal || event.name.toLowerCase().includes(searchVal) ||
+                [row.description, row.details, row.category, row.type]
+                    .some(value => String(value || '').toLowerCase().includes(searchVal));
+            return matchesType && matchesSearch;
+        });
+        const plannedIncome = allEventRows
+            .filter(row => row.type === '수입')
+            .reduce((sum, row) => sum + Number(row.amount || 0), 0);
+        const plannedExpense = allEventRows
+            .filter(row => row.type === '지출')
+            .reduce((sum, row) => sum + Number(row.amount || 0), 0);
+        const balance = plannedIncome - plannedExpense;
+
+        const card = document.createElement('article');
+        card.className = 'glass-panel budget-plan-card';
+
+        const rowHtml = rows.length > 0 ? rows.map(row => `
+            <tr>
+                <td data-label="구분"><span class="budget-type-badge ${row.type === '수입' ? 'income' : 'expense'}">${escapeHTML(row.type)}</span></td>
+                <td data-label="항목">
+                    <strong class="budget-item-name">${escapeHTML(row.description)}</strong>
+                    <span class="budget-category">${escapeHTML(row.category)}</span>
+                </td>
+                <td data-label="수량·산출근거">${escapeHTML(row.details || '-')}</td>
+                <td data-label="예상 비용" class="budget-amount">${formatCurrency(row.amount)}</td>
+                <td data-label="작업">
+                    <div class="budget-row-actions">
+                        <button class="btn btn-secondary btn-icon" type="button" aria-label="예산 항목 수정" onclick="openEditBudget(${row.id})"><i class="fa-solid fa-pen"></i></button>
+                        <button class="btn btn-danger btn-icon" type="button" aria-label="예산 항목 삭제" onclick="deleteBudget(${row.id})"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                </td>
+            </tr>
+        `).join('') : `<tr><td colspan="5" class="budget-no-rows">${filterType ? `${escapeHTML(filterType)} 예산 항목이 없습니다.` : '아직 등록된 예산 항목이 없습니다.'}</td></tr>`;
+
+        card.innerHTML = `
+            <div class="budget-card-header">
+                <div>
+                    <span class="budget-card-kicker">${escapeHTML(event.month || '일정 미정')}</span>
+                    <h2>${escapeHTML(event.name)} 예산안</h2>
+                </div>
+                <button class="btn btn-primary budget-card-add" type="button" onclick="openBudgetModal(${event.id}, '지출')">
+                    <i class="fa-solid fa-plus"></i> 항목 추가
+                </button>
+            </div>
+            <div class="budget-card-table-wrap">
+                <table class="budget-card-table">
+                    <thead><tr><th>구분</th><th>항목</th><th>수량·산출근거</th><th>예상 비용</th><th>작업</th></tr></thead>
+                    <tbody>${rowHtml}</tbody>
+                </table>
+            </div>
+            <div class="budget-card-summary">
+                <div><span>예상 수입</span><strong>${formatCurrency(plannedIncome)}</strong></div>
+                <div><span>예상 지출</span><strong>${formatCurrency(plannedExpense)}</strong></div>
+                <div class="budget-total"><span>${plannedIncome > 0 ? '예상 잔액' : '총 예산'}</span><strong>${formatCurrency(plannedIncome > 0 ? balance : plannedExpense)}</strong></div>
+            </div>
+        `;
+        container.appendChild(card);
     });
 }
 
@@ -645,6 +739,11 @@ async function toggleStatusDirectly(id, currentStatus) {
 
 // Init general event listeners (filters, modal triggers, submit actions)
 function initEventListeners() {
+    // Budget filters
+    document.getElementById('budget-search').addEventListener('input', renderBudgetTable);
+    document.getElementById('budget-filter-event').addEventListener('change', renderBudgetTable);
+    document.getElementById('budget-filter-type').addEventListener('change', renderBudgetTable);
+
     // Income filters
     document.getElementById('income-search').addEventListener('input', renderIncomeTable);
     document.getElementById('income-filter-event').addEventListener('change', renderIncomeTable);
@@ -664,6 +763,7 @@ function initEventListeners() {
     document.getElementById('event-form').addEventListener('submit', handleEventSubmit);
     document.getElementById('income-form').addEventListener('submit', handleIncomeSubmit);
     document.getElementById('expenditure-form').addEventListener('submit', handleExpenditureSubmit);
+    document.getElementById('budget-form').addEventListener('submit', handleBudgetSubmit);
     document.getElementById('receipt-submit-form').addEventListener('submit', handleReceiptSubmit);
     
     // Direct modal triggers
@@ -692,6 +792,8 @@ function initEventListeners() {
         document.getElementById('admin-file-preview').style.display = 'none';
         openModal('expenditure-modal');
     });
+
+    document.getElementById('add-budget-btn').addEventListener('click', () => openBudgetModal());
 
     // Report export triggers
     document.getElementById('export-ledger-btn').addEventListener('click', exportTransactionLedger);
@@ -1087,7 +1189,82 @@ async function deleteExpenditure(id) {
 }
 window.deleteExpenditure = deleteExpenditure;
 
-// 4. External Receipt submission (Form View)
+// 4. Budget planning CRUD
+function openBudgetModal(eventId = '', type = '지출') {
+    document.getElementById('budget-modal-title').textContent = '예산 항목 등록';
+    document.getElementById('budget-form').reset();
+    document.getElementById('budget-modal-id').value = '';
+    document.getElementById('budget-modal-event').value = eventId || '';
+    document.getElementById('budget-modal-type').value = type;
+    openModal('budget-modal');
+}
+window.openBudgetModal = openBudgetModal;
+
+async function handleBudgetSubmit() {
+    const id = document.getElementById('budget-modal-id').value;
+    const event_id = document.getElementById('budget-modal-event').value;
+    const type = document.getElementById('budget-modal-type').value;
+    const category = document.getElementById('budget-modal-category').value;
+    const description = document.getElementById('budget-modal-description').value.trim();
+    const details = document.getElementById('budget-modal-details').value.trim();
+    const amount = Number(document.getElementById('budget-modal-amount').value);
+
+    if (!event_id || !type || !category || !description || !Number.isFinite(amount) || amount < 0) {
+        showToast('필수 항목과 올바른 금액을 입력해 주세요.', 'error');
+        return;
+    }
+
+    const body = { event_id: Number(event_id), type, category, description, details, amount };
+    if (id) body.id = Number(id);
+
+    try {
+        const response = await fetch(`${API_BASE}/budgets`, {
+            method: id ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (!response.ok) throw new Error('API Error');
+
+        showToast(id ? '예산 항목이 수정되었습니다.' : '예산 항목이 등록되었습니다.', 'success');
+        closeModal('budget-modal');
+        await fetchBudgets();
+    } catch (err) {
+        showToast('예산 항목 저장에 실패했습니다.', 'error');
+        console.error(err);
+    }
+}
+
+function openEditBudget(id) {
+    const record = budgetRecords.find(row => Number(row.id) === Number(id));
+    if (!record) return;
+
+    document.getElementById('budget-modal-title').textContent = '예산 항목 수정';
+    document.getElementById('budget-modal-id').value = record.id;
+    document.getElementById('budget-modal-event').value = record.event_id || '';
+    document.getElementById('budget-modal-type').value = record.type;
+    document.getElementById('budget-modal-category').value = record.category;
+    document.getElementById('budget-modal-description').value = record.description;
+    document.getElementById('budget-modal-details').value = record.details || '';
+    document.getElementById('budget-modal-amount').value = record.amount;
+    openModal('budget-modal');
+}
+window.openEditBudget = openEditBudget;
+
+async function deleteBudget(id) {
+    if (!confirm('이 예산 항목을 삭제하시겠습니까?')) return;
+    try {
+        const response = await fetch(`${API_BASE}/budgets?id=${id}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('Delete failed');
+        showToast('예산 항목이 삭제되었습니다.', 'success');
+        await fetchBudgets();
+    } catch (err) {
+        showToast('예산 항목 삭제에 실패했습니다.', 'error');
+        console.error(err);
+    }
+}
+window.deleteBudget = deleteBudget;
+
+// 5. External Receipt submission (Form View)
 async function handleReceiptSubmit(e) {
     const submitter = document.getElementById('form-submitter').value;
     const event_id = document.getElementById('form-event-id').value;

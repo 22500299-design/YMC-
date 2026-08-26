@@ -287,6 +287,7 @@ class YMCApiHandler(http.server.SimpleHTTPRequestHandler):
                 type_ = data.get('type')
                 category = data.get('category')
                 description = data.get('description')
+                details = data.get('details')
                 amount = data.get('amount')
 
                 if not event_id or not type_ or not category or not description or amount is None:
@@ -294,9 +295,9 @@ class YMCApiHandler(http.server.SimpleHTTPRequestHandler):
                     return
 
                 cursor.execute("""
-                    INSERT INTO budget_planning (event_id, type, category, description, amount)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (int(event_id), type_, category, description, int(amount)))
+                    INSERT INTO budget_planning (event_id, type, category, description, details, amount)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (int(event_id), type_, category, description, details, int(amount)))
                 conn.commit()
                 self.send_json_response(201, {'id': cursor.lastrowid, 'status': 'success'})
             
@@ -405,6 +406,7 @@ class YMCApiHandler(http.server.SimpleHTTPRequestHandler):
                 type_ = data.get('type')
                 category = data.get('category')
                 description = data.get('description')
+                details = data.get('details')
                 amount = data.get('amount')
 
                 if not id_ or not event_id or not type_ or not category or not description or amount is None:
@@ -413,9 +415,9 @@ class YMCApiHandler(http.server.SimpleHTTPRequestHandler):
 
                 cursor.execute("""
                     UPDATE budget_planning 
-                    SET event_id = ?, type = ?, category = ?, description = ?, amount = ?
+                    SET event_id = ?, type = ?, category = ?, description = ?, details = ?, amount = ?
                     WHERE id = ?
-                """, (int(event_id), type_, category, description, int(amount), int(id_)))
+                """, (int(event_id), type_, category, description, details, int(amount), int(id_)))
                 conn.commit()
                 self.send_json_response(200, {'status': 'success'})
             

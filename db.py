@@ -167,6 +167,7 @@ def init_db():
         type TEXT NOT NULL, -- '수입', '지출'
         category TEXT NOT NULL,
         description TEXT NOT NULL,
+        details TEXT,
         amount INTEGER NOT NULL,
         FOREIGN KEY (event_id) REFERENCES event_master(id) ON DELETE CASCADE
     )
@@ -181,11 +182,13 @@ def init_db():
         cursor.execute("ALTER TABLE event_master ADD COLUMN IF NOT EXISTS is_settled INTEGER DEFAULT 0")
         cursor.execute("ALTER TABLE event_master ADD COLUMN IF NOT EXISTS settled_date TEXT")
         cursor.execute("ALTER TABLE event_master ADD COLUMN IF NOT EXISTS settlement_notes TEXT")
+        cursor.execute("ALTER TABLE budget_planning ADD COLUMN IF NOT EXISTS details TEXT")
     else:
         migrations = {
             'event_master': [('is_settled', 'INTEGER DEFAULT 0'), ('settled_date', 'TEXT'), ('settlement_notes', 'TEXT')],
             'income_management': [('transaction_date', 'TEXT'), ('payer_name', 'TEXT')],
-            'expenditure_receipt': [('transaction_date', 'TEXT'), ('withdrawer_name', 'TEXT')]
+            'expenditure_receipt': [('transaction_date', 'TEXT'), ('withdrawer_name', 'TEXT')],
+            'budget_planning': [('details', 'TEXT')]
         }
         for table_name, columns in migrations.items():
             for col_name, col_type in columns:
