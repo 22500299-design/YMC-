@@ -12,7 +12,7 @@
     <!-- SheetJS for Client-Side Excel Export -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <!-- Custom Styleheet -->
-    <link rel="stylesheet" href="style.css?v=20260826-2">
+    <link rel="stylesheet" href="style.css?v=20260910-1">
 </head>
 
 <body>
@@ -130,24 +130,25 @@
 
                 <!-- Dashboard Details Layout -->
                 <div class="dashboard-details-grid">
-                    <!-- Event Wise Summary Table -->
+                    <!-- Recent Income / Expenditure Ledger -->
                     <div class="glass-panel" style="display: flex; flex-direction: column;">
                         <div class="panel-header">
-                            <span class="panel-title"><i class="fa-solid fa-circle-info"></i> 행사별 예산/결산 현황</span>
+                            <span class="panel-title"><i class="fa-solid fa-list-ul"></i> 최근 수입·지출 목록</span>
+                            <span class="dashboard-ledger-hint"><i class="fa-solid fa-arrow-pointer"></i> 항목을 누르면 상세 장부로 이동</span>
                         </div>
                         <div class="panel-body" style="flex: 1; padding: 0;">
                             <div class="table-container">
                                 <table>
                                     <thead>
                                         <tr>
-                                            <th>행사명</th>
-                                            <th>수입(예산)</th>
-                                            <th>지출(결산)</th>
-                                            <th>잔액</th>
-                                            <th>진행률</th>
+                                            <th>거래일자</th>
+                                            <th>구분</th>
+                                            <th>입·출금자</th>
+                                            <th>내역</th>
+                                            <th style="text-align: right;">금액</th>
                                         </tr>
                                     </thead>
-                                    <tbody id="dashboard-event-table-body">
+                                    <tbody id="dashboard-transaction-table-body">
                                         <!-- Dynamic Data -->
                                     </tbody>
                                 </table>
@@ -1129,7 +1130,7 @@
     </div>
 
     <!-- Frontend logic app.js -->
-    <script src="app.js?v=20260826-2"></script>
+    <script src="app.js?v=20260910-1"></script>
 </body>
 
 </html>

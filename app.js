@@ -456,6 +456,7 @@ function renderIncomeTable() {
     
     filtered.forEach(row => {
         const tr = document.createElement('tr');
+        tr.dataset.recordId = row.id;
         tr.innerHTML = `
             <td style="white-space: nowrap;">${escapeHTML(row.transaction_date || '-')}</td>
             <td>${escapeHTML(row.payer_name || '-')}</td>
@@ -504,6 +505,7 @@ function renderExpenditureTable() {
     
     filtered.forEach(row => {
         const tr = document.createElement('tr');
+        tr.dataset.recordId = row.id;
         
         const badgeClass = row.status === '승인 완료' ? 'badge-approved' : 'badge-pending';
         const badgeIcon = row.status === '승인 완료' ? 'fa-circle-check' : 'fa-clock';
@@ -629,49 +631,40 @@ function updateDashboardUI() {
     document.getElementById('stat-balance').textContent = formatCurrency(dashboardStats.balance);
     document.getElementById('stat-pending-count').textContent = `${dashboardStats.pending_receipts}건`;
     
-    // Update Event Summary Table
-    const tbody = document.getElementById('dashboard-event-table-body');
+    // Update recent income / expenditure ledger
+    const tbody = document.getElementById('dashboard-transaction-table-body');
     tbody.innerHTML = '';
-    
-    if (dashboardStats.event_summaries.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 30px;">행사 데이터가 없습니다.</td></tr>`;
+
+    const recentTransactions = dashboardStats.recent_transactions || [];
+    if (recentTransactions.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 30px;">등록된 수입·지출 내역이 없습니다.</td></tr>`;
     } else {
-        dashboardStats.event_summaries.forEach(row => {
+        recentTransactions.forEach(row => {
+            const isIncome = row.transaction_type === 'income';
+            const typeLabel = isIncome ? '수입' : '지출';
+            const typeIcon = isIncome ? 'fa-arrow-down' : 'fa-arrow-up';
+            const amountClass = isIncome ? 'income' : 'expenditure';
             const tr = document.createElement('tr');
-            
-            // Calculate budget execution percent
-            const totalBudget = row.income_sum || 0;
-            const spent = row.expenditure_sum || 0;
-            const netBalance = totalBudget - spent;
-            
-            let percent = 0;
-            let barColor = 'var(--primary)';
-            if (totalBudget > 0) {
-                percent = Math.round((spent / totalBudget) * 100);
-            } else if (spent > 0) {
-                percent = 100; // spent money without budget
-                barColor = 'var(--danger)';
-            }
-            
-            if (percent > 100) {
-                barColor = 'var(--danger)';
-            } else if (percent > 80) {
-                barColor = 'var(--warning)';
-            }
-            
+            tr.className = 'dashboard-transaction-row';
+            tr.tabIndex = 0;
+            tr.setAttribute('role', 'link');
+            tr.setAttribute('aria-label', `${typeLabel} 장부에서 ${row.description} 보기`);
+            tr.addEventListener('click', () => openDashboardTransaction(row.transaction_type, row.record_id));
+            tr.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    openDashboardTransaction(row.transaction_type, row.record_id);
+                }
+            });
             tr.innerHTML = `
-                <td style="font-weight: 600;">${escapeHTML(row.event_name)}</td>
-                <td style="text-align: right; color: var(--secondary); font-family: var(--font-heading);">${formatCurrency(totalBudget)}</td>
-                <td style="text-align: right; color: #f87171; font-family: var(--font-heading);">${formatCurrency(spent)}</td>
-                <td style="text-align: right; font-weight: 600; font-family: var(--font-heading);">${formatCurrency(netBalance)}</td>
-                <td style="width: 140px;">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <div style="flex: 1; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
-                            <div style="width: ${Math.min(percent, 100)}%; height: 100%; background: ${barColor}; border-radius: 3px;"></div>
-                        </div>
-                        <span style="font-size: 0.75rem; font-weight: 600; min-width: 28px; text-align: right;">${percent}%</span>
-                    </div>
+                <td>${escapeHTML(row.transaction_date || '-')}</td>
+                <td><span class="dashboard-transaction-badge ${amountClass}"><i class="fa-solid ${typeIcon}"></i> ${typeLabel}</span></td>
+                <td>${escapeHTML(row.party_name || '-')}</td>
+                <td class="dashboard-transaction-description">
+                    <strong>${escapeHTML(row.description)}</strong>
+                    <small>${escapeHTML(row.event_name || '미지정')} · ${escapeHTML(row.category || '-')}</small>
                 </td>
+                <td class="dashboard-transaction-amount ${amountClass}">${isIncome ? '+' : '-'}${formatCurrency(row.amount)}</td>
             `;
             tbody.appendChild(tr);
         });
@@ -679,6 +672,21 @@ function updateDashboardUI() {
     
     // Draw/Update Chart
     drawDashboardChart();
+}
+
+function openDashboardTransaction(transactionType, recordId) {
+    const target = transactionType === 'income' ? 'income' : 'expenditures';
+    const navItem = document.querySelector(`.nav-item[data-target="${target}"]`);
+    if (!navItem) return;
+
+    navItem.click();
+    requestAnimationFrame(() => {
+        const row = document.querySelector(`#${target === 'income' ? 'income' : 'expenditure'}-table-body tr[data-record-id="${recordId}"]`);
+        if (!row) return;
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row.classList.add('ledger-row-highlight');
+        setTimeout(() => row.classList.remove('ledger-row-highlight'), 1800);
+    });
 }
 
 function drawDashboardChart() {
@@ -2291,7 +2299,7 @@ async function syncDuesToIncome() {
     const confirmMsg = 
 `[${currentItem.title}]에서 현재까지 납부 완료된 금액
 총 ${formatCurrency(totalPaid)} (${paidList.length}명)을
-수입 관리 장부에 '회비' 분류로 등록하시겠습니까?`;
+각 납부자의 입금일 기준으로 수입 장부에 등록하시겠습니까?`;
 
     if (!confirm(confirmMsg)) return;
 
@@ -2307,7 +2315,11 @@ async function syncDuesToIncome() {
             throw new Error(errData.error || '수입 장부 연동 실패');
         }
 
-        showToast(`총 ${formatCurrency(totalPaid)}이 수입 장부에 성공적으로 반영되었습니다! 💰`, 'success');
+        const result = await response.json();
+        const detail = result.updated_count > 0
+            ? `신규 ${result.created_count}건 · 갱신 ${result.updated_count}건`
+            : `${result.created_count}건`;
+        showToast(`${result.record_count}명의 회비 ${formatCurrency(result.amount)}이 입금일별로 반영되었습니다. (${detail})`, 'success');
 
         // Refresh income and dashboard stats
         await Promise.all([

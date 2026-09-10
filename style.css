@@ -378,6 +378,63 @@ td {
     white-space: nowrap;
 }
 tr:last-child td { border-bottom: none; }
+
+.dashboard-ledger-hint {
+    color: var(--text-muted);
+    font-size: 0.76rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.dashboard-transaction-row { cursor: pointer; }
+.dashboard-transaction-row td { transition: background-color 0.18s ease; }
+.dashboard-transaction-row:hover td,
+.dashboard-transaction-row:focus td { background: #f7f2e9; }
+.dashboard-transaction-row:focus { outline: none; }
+
+.dashboard-transaction-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+.dashboard-transaction-badge.income {
+    color: var(--success);
+    background: var(--success-bg);
+}
+.dashboard-transaction-badge.expenditure {
+    color: var(--danger);
+    background: var(--danger-bg);
+}
+.dashboard-transaction-description { white-space: normal; min-width: 180px; }
+.dashboard-transaction-description strong,
+.dashboard-transaction-description small { display: block; }
+.dashboard-transaction-description small {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    margin-top: 3px;
+}
+.dashboard-transaction-amount {
+    text-align: right;
+    font-family: var(--font-heading);
+    font-weight: 700;
+}
+.dashboard-transaction-amount.income { color: var(--success); }
+.dashboard-transaction-amount.expenditure { color: var(--danger); }
+
+.ledger-row-highlight td { animation: ledger-row-highlight 1.8s ease; }
+@keyframes ledger-row-highlight {
+    0%, 35% { background: #fff2bd; }
+    100% { background: #fff; }
+}
+
+@media (max-width: 640px) {
+    .dashboard-ledger-hint { display: none; }
+}
 tr:hover td { background: #fbf8f1; }
 
 /* ── BADGE ── */

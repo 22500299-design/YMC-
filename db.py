@@ -137,6 +137,7 @@ def init_db():
         remarks TEXT,
         transaction_date TEXT,
         payer_name TEXT,
+        fee_payment_id INTEGER,
         FOREIGN KEY (event_id) REFERENCES event_master(id) ON DELETE SET NULL
     )
     ''')
@@ -208,6 +209,7 @@ def init_db():
     if DATABASE_URL:
         cursor.execute("ALTER TABLE income_management ADD COLUMN IF NOT EXISTS transaction_date TEXT")
         cursor.execute("ALTER TABLE income_management ADD COLUMN IF NOT EXISTS payer_name TEXT")
+        cursor.execute("ALTER TABLE income_management ADD COLUMN IF NOT EXISTS fee_payment_id INTEGER")
         cursor.execute("ALTER TABLE expenditure_receipt ADD COLUMN IF NOT EXISTS transaction_date TEXT")
         cursor.execute("ALTER TABLE expenditure_receipt ADD COLUMN IF NOT EXISTS withdrawer_name TEXT")
         cursor.execute("ALTER TABLE event_master ADD COLUMN IF NOT EXISTS is_settled INTEGER DEFAULT 0")
@@ -217,7 +219,7 @@ def init_db():
     else:
         migrations = {
             'event_master': [('is_settled', 'INTEGER DEFAULT 0'), ('settled_date', 'TEXT'), ('settlement_notes', 'TEXT')],
-            'income_management': [('transaction_date', 'TEXT'), ('payer_name', 'TEXT')],
+            'income_management': [('transaction_date', 'TEXT'), ('payer_name', 'TEXT'), ('fee_payment_id', 'INTEGER')],
             'expenditure_receipt': [('transaction_date', 'TEXT'), ('withdrawer_name', 'TEXT')],
             'budget_planning': [('details', 'TEXT')]
         }
@@ -227,6 +229,13 @@ def init_db():
                     cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_type}")
                 except sqlite3.OperationalError:
                     pass
+
+    # Each dues payment maps to at most one automatically synchronized income row.
+    # NULL is allowed so manually entered income records are unaffected.
+    cursor.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_income_fee_payment_id
+        ON income_management (fee_payment_id)
+    """)
 
     # Insert default rows for Event Master if empty
     cursor.execute("SELECT COUNT(*) FROM event_master")

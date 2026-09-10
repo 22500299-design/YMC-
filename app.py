@@ -137,7 +137,7 @@ class YMCApiHandler(http.server.SimpleHTTPRequestHandler):
                     SELECT i.*, e.name as event_name 
                     FROM income_management i
                     LEFT JOIN event_master e ON i.event_id = e.id
-                    ORDER BY i.id DESC
+                    ORDER BY COALESCE(i.transaction_date, '') DESC, i.id DESC
                 """)
                 income = [dict(row) for row in cursor.fetchall()]
                 self.send_json_response(200, income)
@@ -206,19 +206,44 @@ class YMCApiHandler(http.server.SimpleHTTPRequestHandler):
                 pending_receipts = cursor.fetchone()[0] or 0
 
                 cursor.execute("""
-                    SELECT e.name as event_name, 
-                           COALESCE((SELECT SUM(amount) FROM income_management WHERE event_id = e.id), 0) as income_sum,
-                           COALESCE((SELECT SUM(amount) FROM expenditure_receipt WHERE event_id = e.id), 0) as expenditure_sum
-                    FROM event_master e
+                    SELECT transaction_type, record_id, transaction_date, party_name,
+                           event_name, category, description, amount
+                    FROM (
+                        SELECT 'income' AS transaction_type,
+                               i.id AS record_id,
+                               i.transaction_date,
+                               COALESCE(i.payer_name, '') AS party_name,
+                               COALESCE(e.name, '미지정') AS event_name,
+                               i.category,
+                               i.description,
+                               i.amount
+                        FROM income_management i
+                        LEFT JOIN event_master e ON i.event_id = e.id
+
+                        UNION ALL
+
+                        SELECT 'expenditure' AS transaction_type,
+                               ex.id AS record_id,
+                               ex.transaction_date,
+                               COALESCE(ex.withdrawer_name, ex.submitter, '') AS party_name,
+                               COALESCE(e.name, '미지정') AS event_name,
+                               ex.category,
+                               ex.description,
+                               ex.amount
+                        FROM expenditure_receipt ex
+                        LEFT JOIN event_master e ON ex.event_id = e.id
+                    ) AS recent_transactions
+                    ORDER BY COALESCE(transaction_date, '') DESC, record_id DESC
+                    LIMIT 12
                 """)
-                event_summaries = [dict(row) for row in cursor.fetchall()]
+                recent_transactions = [dict(row) for row in cursor.fetchall()]
 
                 self.send_json_response(200, {
                     'total_income': total_income,
                     'total_expenditure': total_expenditure,
                     'balance': total_income - total_expenditure,
                     'pending_receipts': pending_receipts,
-                    'event_summaries': event_summaries
+                    'recent_transactions': recent_transactions
                 })
 
             elif path == '/api/dues/items':
@@ -474,29 +499,98 @@ class YMCApiHandler(http.server.SimpleHTTPRequestHandler):
                 fee_item = dict(fee_item)
 
                 cursor.execute("""
-                    SELECT COUNT(*) as paid_count, COALESCE(SUM(paid_amount), 0) as total_paid
+                    SELECT id, member_name, student_id, paid_amount, paid_date, memo
                     FROM fee_payments
-                    WHERE fee_item_id = ? AND status = '납부 완료'
+                    WHERE fee_item_id = ? AND status = '납부 완료' AND paid_amount > 0
+                    ORDER BY paid_date ASC, id ASC
                 """, (int(fee_item_id),))
-                stat = dict(cursor.fetchone())
-                total_paid = stat['total_paid']
-                paid_count = stat['paid_count']
+                paid_payments = [dict(row) for row in cursor.fetchall()]
 
-                if total_paid <= 0:
+                if not paid_payments:
                     self.send_error_response(400, "납부 완료된 금액이 없어 수입 장부에 반영할 내역이 없습니다.")
                     return
 
-                today_str = datetime.datetime.now().strftime('%Y-%m-%d')
-                description = f"[{fee_item['title']}] 납부 회비 정산"
-                basis = f"납부 완료 {paid_count}명 기준 (총 {total_paid:,}원)"
-                payer_name = f"동아리 부원 ({paid_count}명)"
+                missing_date_names = [p['member_name'] for p in paid_payments if not p.get('paid_date')]
+                if missing_date_names:
+                    names = ', '.join(missing_date_names)
+                    self.send_error_response(400, f"납부일이 없는 부원이 있습니다: {names}. 회비 관리에서 납부일을 입력해 주세요.")
+                    return
 
+                # Remove the old one-row aggregate created by earlier versions, then keep
+                # one income row per member payment. fee_payment_id makes re-sync idempotent.
+                sync_remarks = f"{fee_item['title']} 납부 관리 자동 연동"
+                old_description = f"[{fee_item['title']}] 납부 회비 정산"
                 cursor.execute("""
-                    INSERT INTO income_management (category, event_id, description, amount, basis, remarks, transaction_date, payer_name)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, ('회비', fee_item['event_id'], description, total_paid, basis, f"{fee_item['title']} 납부 관리 자동 연동", today_str, payer_name))
+                    DELETE FROM income_management
+                    WHERE fee_payment_id IS NULL
+                      AND category = '회비'
+                      AND description = ?
+                      AND remarks = ?
+                """, (old_description, sync_remarks))
+
+                # If a previously synced member is now unpaid or exempt, remove that
+                # automatically created income row from the ledger.
+                cursor.execute("""
+                    DELETE FROM income_management
+                    WHERE fee_payment_id IN (
+                        SELECT id FROM fee_payments
+                        WHERE fee_item_id = ? AND status <> '납부 완료'
+                    )
+                """, (int(fee_item_id),))
+
+                created_count = 0
+                updated_count = 0
+                total_paid = 0
+
+                for payment in paid_payments:
+                    payment_id = int(payment['id'])
+                    member_name = payment['member_name']
+                    student_id = payment.get('student_id') or ''
+                    paid_amount = int(payment.get('paid_amount') or 0)
+                    paid_date = payment['paid_date']
+                    description = f"[{fee_item['title']}] {member_name} 회비"
+                    basis = f"{student_id} / 개별 납부" if student_id else "개별 납부"
+                    remarks = sync_remarks
+
+                    cursor.execute(
+                        "SELECT id FROM income_management WHERE fee_payment_id = ?",
+                        (payment_id,)
+                    )
+                    existing_income = cursor.fetchone()
+
+                    if existing_income:
+                        cursor.execute("""
+                            UPDATE income_management
+                            SET category = ?, event_id = ?, description = ?, amount = ?,
+                                basis = ?, remarks = ?, transaction_date = ?, payer_name = ?
+                            WHERE fee_payment_id = ?
+                        """, (
+                            '회비', fee_item['event_id'], description, paid_amount,
+                            basis, remarks, paid_date, member_name, payment_id
+                        ))
+                        updated_count += 1
+                    else:
+                        cursor.execute("""
+                            INSERT INTO income_management
+                                (category, event_id, description, amount, basis, remarks,
+                                 transaction_date, payer_name, fee_payment_id)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            '회비', fee_item['event_id'], description, paid_amount,
+                            basis, remarks, paid_date, member_name, payment_id
+                        ))
+                        created_count += 1
+
+                    total_paid += paid_amount
+
                 conn.commit()
-                self.send_json_response(201, {'status': 'success', 'income_id': cursor.lastrowid, 'amount': total_paid})
+                self.send_json_response(200, {
+                    'status': 'success',
+                    'amount': total_paid,
+                    'record_count': len(paid_payments),
+                    'created_count': created_count,
+                    'updated_count': updated_count
+                })
             
             else:
                 self.send_error_response(404, "API endpoint not found")
@@ -659,6 +753,8 @@ class YMCApiHandler(http.server.SimpleHTTPRequestHandler):
                     SET member_name = ?, student_id = ?, status = ?, paid_amount = ?, paid_date = ?, memo = ?
                     WHERE id = ?
                 """, (member_name, student_id, status, int(paid_amount or 0), paid_date, memo, int(id_)))
+                if status != '납부 완료' or not paid_date or int(paid_amount or 0) <= 0:
+                    cursor.execute("DELETE FROM income_management WHERE fee_payment_id = ?", (int(id_),))
                 conn.commit()
                 self.send_json_response(200, {'status': 'success'})
 
@@ -694,6 +790,8 @@ class YMCApiHandler(http.server.SimpleHTTPRequestHandler):
                     SET status = ?, paid_amount = ?, paid_date = ?
                     WHERE id = ?
                 """, (new_status, new_amount, new_date, int(id_)))
+                if new_status != '납부 완료':
+                    cursor.execute("DELETE FROM income_management WHERE fee_payment_id = ?", (int(id_),))
                 conn.commit()
                 self.send_json_response(200, {
                     'status': 'success',
@@ -736,11 +834,18 @@ class YMCApiHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_json_response(200, {'status': 'success'})
 
             elif path == '/api/dues/items':
+                cursor.execute("""
+                    DELETE FROM income_management
+                    WHERE fee_payment_id IN (
+                        SELECT id FROM fee_payments WHERE fee_item_id = ?
+                    )
+                """, (id_,))
                 cursor.execute("DELETE FROM fee_items WHERE id = ?", (id_,))
                 conn.commit()
                 self.send_json_response(200, {'status': 'success'})
 
             elif path == '/api/dues/payments':
+                cursor.execute("DELETE FROM income_management WHERE fee_payment_id = ?", (id_,))
                 cursor.execute("DELETE FROM fee_payments WHERE id = ?", (id_,))
                 conn.commit()
                 self.send_json_response(200, {'status': 'success'})
