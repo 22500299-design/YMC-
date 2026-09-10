@@ -17,6 +17,19 @@ let currentDuesPayments = [];
 // API Base URL
 const API_BASE = '/api';
 
+const VIEW_META = {
+    dashboard: { title: '대시보드', subtitle: '동아리 회계 정보 통합 대시보드' },
+    transactions: { title: '수입·지출 목록', subtitle: '모든 거래와 부원별 회비 납부 내역 통합 조회' },
+    dues: { title: '회비 관리', subtitle: '연간 2회 정기회비 및 행사별 회비 납부 현황 실시간 관리' },
+    events: { title: '행사 마스터', subtitle: '행사 정보 등록 및 기본 마스터 정보 관리' },
+    budgets: { title: '예산 계획', subtitle: '행사별 예상 수입 및 지출 한도 설정' },
+    income: { title: '수입 관리', subtitle: '회비, 지원금, 후원금 등 수입 내역 관리' },
+    expenditures: { title: '지출 관리', subtitle: '영수증 증빙 및 세부 지출 항목 관리' },
+    gallery: { title: '영수증 갤러리', subtitle: '제출된 영수증 한눈에 검토 및 승인 처리' },
+    settlements: { title: '결산 보고', subtitle: '수립된 예산 계획 대비 실제 지출 및 수입 비교 검증 및 결산 확정' },
+    export: { title: '보고서 및 출력', subtitle: '학교 보고서 양식용 파일 다운로드 및 출력' }
+};
+
 // Toast Notification Helper
 function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
@@ -63,61 +76,53 @@ document.addEventListener('DOMContentLoaded', () => {
 // Navigation & Routing Setup
 function initNavigation() {
     const navItems = document.querySelectorAll('.nav-item');
-    const sections = document.querySelectorAll('.content-section');
-    const viewTitle = document.getElementById('view-title');
-    const viewSubtitle = document.getElementById('view-subtitle');
-
-    const viewMeta = {
-        dashboard: { title: '대시보드', subtitle: '동아리 회계 정보 통합 대시보드' },
-        dues: { title: '회비 관리', subtitle: '연간 2회 정기회비 및 행사별 회비 납부 현황 실시간 관리' },
-        events: { title: '행사 마스터', subtitle: '행사 정보 등록 및 기본 마스터 정보 관리' },
-        budgets: { title: '예산 계획', subtitle: '행사별 예상 수입 및 지출 한도 설정' },
-        income: { title: '수입 관리', subtitle: '회비, 지원금, 후원금 등 수입 내역 관리' },
-        expenditures: { title: '지출 관리', subtitle: '영수증 증빙 및 세부 지출 항목 관리' },
-        gallery: { title: '영수증 갤러리', subtitle: '제출된 영수증 한눈에 검토 및 승인 처리' },
-        settlements: { title: '결산 보고', subtitle: '수립된 예산 계획 대비 실제 지출 및 수입 비교 검증 및 결산 확정' },
-        export: { title: '보고서 및 출력', subtitle: '학교 보고서 양식용 파일 다운로드 및 출력' }
-    };
 
     navItems.forEach(item => {
-        item.addEventListener('click', (e) => {
+        item.addEventListener('click', () => {
             // Check if member form button
             if (item.id === 'open-member-form-btn') return;
             
             const target = item.getAttribute('data-target');
             if (!target) return;
-
-            // Update Nav Active State
-            navItems.forEach(n => n.classList.remove('active'));
-            item.classList.add('active');
-
-            // Update View Section Visibility
-            sections.forEach(s => s.classList.remove('active'));
-            const targetSection = document.getElementById(`${target}-section`);
-            if (targetSection) targetSection.classList.add('active');
-
-            // Update Headers
-            if (viewMeta[target]) {
-                viewTitle.textContent = viewMeta[target].title;
-                viewSubtitle.textContent = viewMeta[target].subtitle;
-            }
-            
-            // Refresh data for specific views
-            if (target === 'dashboard') {
-                fetchDashboardStats();
-            } else if (target === 'dues') {
-                fetchFeeItems(selectedFeeItemId);
-            } else if (target === 'budgets') {
-                fetchBudgets();
-            } else if (target === 'settlements') {
-                fetchComparison();
-            }
+            navigateToView(target);
         });
     });
 
     // Hash change handler for routing (e.g. member submission link)
     window.addEventListener('hashchange', handleHashRouting);
     handleHashRouting();
+}
+
+function navigateToView(target) {
+    const targetSection = document.getElementById(`${target}-section`);
+    if (!targetSection) return;
+
+    document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+    const activeNav = document.querySelector(`.nav-item[data-target="${target}"]`);
+    if (activeNav) activeNav.classList.add('active');
+
+    document.querySelectorAll('.content-section').forEach(section => section.classList.remove('active'));
+    targetSection.classList.add('active');
+
+    const meta = VIEW_META[target];
+    if (meta) {
+        document.getElementById('view-title').textContent = meta.title;
+        document.getElementById('view-subtitle').textContent = meta.subtitle;
+    }
+
+    if (target === 'dashboard') {
+        fetchDashboardStats();
+    } else if (target === 'transactions') {
+        renderTransactionList();
+    } else if (target === 'dues') {
+        fetchFeeItems(selectedFeeItemId);
+    } else if (target === 'budgets') {
+        fetchBudgets();
+    } else if (target === 'settlements') {
+        fetchComparison();
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function handleHashRouting() {
@@ -218,6 +223,7 @@ async function fetchIncome() {
         incomeRecords = await response.json();
         
         renderIncomeTable();
+        renderTransactionList();
     } catch (err) {
         console.error('Income load error:', err);
     }
@@ -231,6 +237,7 @@ async function fetchExpenditures() {
         
         renderExpenditureTable();
         renderReceiptGallery();
+        renderTransactionList();
     } catch (err) {
         console.error('Expenditures load error:', err);
     }
@@ -316,6 +323,7 @@ function populateEventDropdowns() {
         document.getElementById('form-event-id'),
         document.getElementById('income-filter-event'),
         document.getElementById('expenditure-filter-event'),
+        document.getElementById('transaction-filter-event'),
         document.getElementById('gallery-filter-event'),
         document.getElementById('budget-filter-event')
     ];
@@ -547,6 +555,102 @@ function renderExpenditureTable() {
     });
 }
 
+// Render a dedicated, ungrouped income / expenditure list.
+// A synchronized dues payment remains one row per member and keeps its paid date.
+function renderTransactionList() {
+    const tbody = document.getElementById('transaction-list-table-body');
+    if (!tbody) return;
+
+    const searchVal = (document.getElementById('transaction-search')?.value || '').trim().toLowerCase();
+    const filterType = document.getElementById('transaction-filter-type')?.value || '';
+    const filterEvent = document.getElementById('transaction-filter-event')?.value || '';
+
+    const income = incomeRecords.map(row => ({
+        transactionType: 'income',
+        id: row.id,
+        transactionDate: row.transaction_date,
+        personName: row.payer_name || '-',
+        eventId: row.event_id,
+        eventName: row.event_name || '미지정',
+        category: row.category,
+        description: row.description,
+        amount: Number(row.amount || 0),
+        status: row.fee_payment_id ? '납부 완료' : '수입 반영',
+        isDuesPayment: Boolean(row.fee_payment_id)
+    }));
+
+    const expenditures = expenditureRecords.map(row => ({
+        transactionType: 'expenditure',
+        id: row.id,
+        transactionDate: row.transaction_date,
+        personName: row.withdrawer_name || row.submitter || '-',
+        eventId: row.event_id,
+        eventName: row.event_name || '미지정',
+        category: row.category,
+        description: row.description,
+        amount: Number(row.amount || 0),
+        status: row.status || '승인 대기',
+        isDuesPayment: false
+    }));
+
+    const rows = [...income, ...expenditures]
+        .filter(row => {
+            const haystack = [
+                row.transactionDate,
+                row.personName,
+                row.eventName,
+                row.category,
+                row.description,
+                row.status
+            ].map(value => String(value || '').toLowerCase()).join(' ');
+            const matchesSearch = !searchVal || haystack.includes(searchVal);
+            const matchesType = !filterType || row.transactionType === filterType;
+            const matchesEvent = !filterEvent || String(row.eventId) === filterEvent;
+            return matchesSearch && matchesType && matchesEvent;
+        })
+        .sort((a, b) => {
+            const dateCompare = String(b.transactionDate || '').localeCompare(String(a.transactionDate || ''));
+            if (dateCompare !== 0) return dateCompare;
+            return Number(b.id || 0) - Number(a.id || 0);
+        });
+
+    tbody.innerHTML = '';
+    if (rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" class="transaction-list-empty">조건에 맞는 수입·지출 내역이 없습니다.</td></tr>`;
+        return;
+    }
+
+    rows.forEach(row => {
+        const isIncome = row.transactionType === 'income';
+        const typeLabel = isIncome ? '수입' : '지출';
+        const typeClass = isIncome ? 'income' : 'expenditure';
+        const statusClass = row.status === '승인 대기' ? 'badge-pending' : 'badge-approved';
+        const tr = document.createElement('tr');
+        tr.dataset.transactionKey = `${row.transactionType}-${row.id}`;
+        if (row.isDuesPayment) tr.classList.add('dues-payment-row');
+        tr.innerHTML = `
+            <td>${escapeHTML(row.transactionDate || '-')}</td>
+            <td><span class="dashboard-transaction-badge ${typeClass}">${typeLabel}</span></td>
+            <td class="transaction-person-cell">
+                <strong>${escapeHTML(row.personName)}</strong>
+                ${row.isDuesPayment ? '<small>부원별 회비 납부</small>' : ''}
+            </td>
+            <td>${escapeHTML(row.eventName)}</td>
+            <td>${escapeHTML(row.category || '-')}</td>
+            <td class="transaction-description-cell">${escapeHTML(row.description || '-')}</td>
+            <td class="dashboard-transaction-amount ${typeClass}">${isIncome ? '+' : '-'}${formatCurrency(row.amount)}</td>
+            <td><span class="badge ${statusClass}">${escapeHTML(row.status)}</span></td>
+            <td>
+                <button class="btn btn-secondary btn-sm" type="button"
+                    onclick="openLedgerRecord('${row.transactionType}', ${row.id})">
+                    ${typeLabel} 장부 <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
 // Render Gallery View of receipts
 function renderReceiptGallery() {
     const grid = document.getElementById('receipt-gallery-grid');
@@ -675,11 +779,19 @@ function updateDashboardUI() {
 }
 
 function openDashboardTransaction(transactionType, recordId) {
-    const target = transactionType === 'income' ? 'income' : 'expenditures';
-    const navItem = document.querySelector(`.nav-item[data-target="${target}"]`);
-    if (!navItem) return;
+    navigateToView('transactions');
+    requestAnimationFrame(() => {
+        const row = document.querySelector(`#transaction-list-table-body tr[data-transaction-key="${transactionType}-${recordId}"]`);
+        if (!row) return;
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row.classList.add('ledger-row-highlight');
+        setTimeout(() => row.classList.remove('ledger-row-highlight'), 1800);
+    });
+}
 
-    navItem.click();
+function openLedgerRecord(transactionType, recordId) {
+    const target = transactionType === 'income' ? 'income' : 'expenditures';
+    navigateToView(target);
     requestAnimationFrame(() => {
         const row = document.querySelector(`#${target === 'income' ? 'income' : 'expenditure'}-table-body tr[data-record-id="${recordId}"]`);
         if (!row) return;
@@ -766,6 +878,13 @@ function initEventListeners() {
     document.getElementById('income-search').addEventListener('input', renderIncomeTable);
     document.getElementById('income-filter-event').addEventListener('change', renderIncomeTable);
     document.getElementById('income-filter-category').addEventListener('change', renderIncomeTable);
+
+    // Combined transaction list filters and navigation
+    document.getElementById('transaction-search').addEventListener('input', renderTransactionList);
+    document.getElementById('transaction-filter-type').addEventListener('change', renderTransactionList);
+    document.getElementById('transaction-filter-event').addEventListener('change', renderTransactionList);
+    document.getElementById('open-transaction-list-btn').addEventListener('click', () => navigateToView('transactions'));
+    document.getElementById('transaction-back-btn').addEventListener('click', () => navigateToView('dashboard'));
     
     // Expenditure filters
     document.getElementById('expenditure-search').addEventListener('input', renderExpenditureTable);

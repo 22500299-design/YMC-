@@ -426,6 +426,50 @@ tr:last-child td { border-bottom: none; }
 .dashboard-transaction-amount.income { color: var(--success); }
 .dashboard-transaction-amount.expenditure { color: var(--danger); }
 
+.transaction-list-intro {
+    padding: 22px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+}
+.transaction-list-intro h2 {
+    margin: 4px 0 6px;
+    color: var(--text-primary);
+    font-family: var(--font-heading);
+    font-size: 1.35rem;
+}
+.transaction-list-intro p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.86rem;
+}
+.transaction-list-kicker {
+    color: var(--primary);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+}
+.transaction-person-cell strong,
+.transaction-person-cell small { display: block; }
+.transaction-person-cell small {
+    margin-top: 3px;
+    color: var(--success);
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+.transaction-description-cell {
+    min-width: 220px;
+    white-space: normal;
+}
+.dues-payment-row td { background: #fbfff9; }
+.dues-payment-row:hover td { background: #f0f8ec; }
+.transaction-list-empty {
+    padding: 48px;
+    text-align: center;
+    color: var(--text-muted);
+}
+
 .ledger-row-highlight td { animation: ledger-row-highlight 1.8s ease; }
 @keyframes ledger-row-highlight {
     0%, 35% { background: #fff2bd; }
@@ -434,6 +478,11 @@ tr:last-child td { border-bottom: none; }
 
 @media (max-width: 640px) {
     .dashboard-ledger-hint { display: none; }
+    .transaction-list-intro {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 18px;
+    }
 }
 tr:hover td { background: #fbf8f1; }
 

@@ -283,7 +283,78 @@ def init_db():
                     INSERT INTO fee_payments (fee_item_id, member_name, student_id, status, paid_amount, paid_date, memo)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, sample_members)
-        
+
+    # Convert legacy one-row dues summaries into one income row per paid member.
+    # Only known auto-generated summaries are touched; manually entered income stays intact.
+    cursor.execute("SELECT id, title, event_id FROM fee_items")
+    existing_fee_items = [dict(row) for row in cursor.fetchall()]
+    for fee_item in existing_fee_items:
+        sync_remarks = f"{fee_item['title']} 납부 관리 자동 연동"
+        legacy_description = f"[{fee_item['title']}] 납부 회비 정산"
+        cursor.execute("""
+            SELECT id FROM income_management
+            WHERE fee_payment_id IS NULL
+              AND category = '회비'
+              AND description = ?
+              AND remarks = ?
+        """, (legacy_description, sync_remarks))
+        legacy_rows = cursor.fetchall()
+        if not legacy_rows:
+            continue
+
+        cursor.execute("""
+            SELECT id, member_name, student_id, paid_amount, paid_date
+            FROM fee_payments
+            WHERE fee_item_id = ? AND status = '납부 완료' AND paid_amount > 0
+            ORDER BY paid_date ASC, id ASC
+        """, (fee_item['id'],))
+        paid_payments = [dict(row) for row in cursor.fetchall()]
+
+        # Never replace a known total with guessed dates.
+        if not paid_payments or any(not payment.get('paid_date') for payment in paid_payments):
+            continue
+
+        cursor.execute("""
+            DELETE FROM income_management
+            WHERE fee_payment_id IS NULL
+              AND category = '회비'
+              AND description = ?
+              AND remarks = ?
+        """, (legacy_description, sync_remarks))
+
+        for payment in paid_payments:
+            student_id = payment.get('student_id') or ''
+            basis = f"{student_id} / 개별 납부" if student_id else "개별 납부"
+            payment_values = (
+                '회비',
+                fee_item['event_id'],
+                f"[{fee_item['title']}] {payment['member_name']} 회비",
+                int(payment['paid_amount'] or 0),
+                basis,
+                sync_remarks,
+                payment['paid_date'],
+                payment['member_name'],
+                int(payment['id'])
+            )
+            cursor.execute(
+                "SELECT id FROM income_management WHERE fee_payment_id = ?",
+                (int(payment['id']),)
+            )
+            if cursor.fetchone():
+                cursor.execute("""
+                    UPDATE income_management
+                    SET category = ?, event_id = ?, description = ?, amount = ?,
+                        basis = ?, remarks = ?, transaction_date = ?, payer_name = ?
+                    WHERE fee_payment_id = ?
+                """, payment_values)
+            else:
+                cursor.execute("""
+                    INSERT INTO income_management
+                        (category, event_id, description, amount, basis, remarks,
+                         transaction_date, payer_name, fee_payment_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, payment_values)
+
     conn.commit()
     conn.close()
 
