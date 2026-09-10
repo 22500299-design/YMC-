@@ -172,6 +172,37 @@ def init_db():
         FOREIGN KEY (event_id) REFERENCES event_master(id) ON DELETE CASCADE
     )
     ''')
+
+    # 5. Fee Items Table (연간 2회 정기회비 + 행사별 회비 동적 관리)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS fee_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        type TEXT NOT NULL, -- '정기 회비', '행사 회비'
+        event_id INTEGER,
+        target_amount INTEGER NOT NULL DEFAULT 0,
+        due_date TEXT,
+        description TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (event_id) REFERENCES event_master(id) ON DELETE SET NULL
+    )
+    ''')
+
+    # 6. Fee Payments Table (부원별 회비 납부 현황)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS fee_payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fee_item_id INTEGER NOT NULL,
+        member_name TEXT NOT NULL,
+        student_id TEXT,
+        status TEXT NOT NULL DEFAULT '미납', -- '미납', '납부 완료', '면제'
+        paid_amount INTEGER NOT NULL DEFAULT 0,
+        paid_date TEXT,
+        memo TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (fee_item_id) REFERENCES fee_items(id) ON DELETE CASCADE
+    )
+    ''')
     
     # Handle DB migrations without deleting existing accounting data
     if DATABASE_URL:
@@ -208,6 +239,41 @@ def init_db():
             ('공통 운영', '1월')
         ]
         cursor.executemany("INSERT INTO event_master (name, month) VALUES (?, ?)", default_events)
+
+    # Insert default Fee Items (연간 2회 정기회비 + 샘플 행사 회비)
+    cursor.execute("SELECT COUNT(*) FROM fee_items")
+    if cursor.fetchone()[0] == 0:
+        # Check event_master for MT event id
+        cursor.execute("SELECT id FROM event_master WHERE name LIKE '%MT%' LIMIT 1")
+        mt_event = cursor.fetchone()
+        mt_event_id = mt_event[0] if mt_event else None
+
+        default_fee_items = [
+            ('2026 1학기 정기회비', '정기 회비', None, 20000, '2026-03-31', '1학기 동아리 기본 활동 및 운영 회비'),
+            ('2026 2학기 정기회비', '정기 회비', None, 20000, '2026-09-30', '2학기 동아리 기본 활동 및 운영 회비')
+        ]
+        if mt_event_id:
+            default_fee_items.append(('동아리 봄 MT 참가비', '행사 회비', mt_event_id, 35000, '2026-05-15', 'MT 숙소 및 식비 부원 참가비'))
+
+        for title, ftype, eid, amount, due, desc in default_fee_items:
+            cursor.execute("""
+                INSERT INTO fee_items (title, type, event_id, target_amount, due_date, description)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (title, ftype, eid, amount, due, desc))
+            item_id = cursor.lastrowid
+            
+            # If 1st semester fee, add a few sample members to demonstrate
+            if '1학기' in title:
+                sample_members = [
+                    (item_id, '김철수', '22학번', '납부 완료', 20000, '2026-03-05', '국민은행 입금 확인'),
+                    (item_id, '이영희', '23학번', '납부 완료', 20000, '2026-03-06', '카카오페이'),
+                    (item_id, '박민수', '24학번', '미납', 0, None, '납부 안내 문자 발송'),
+                    (item_id, '정다은', '21학번', '미납', 0, None, '')
+                ]
+                cursor.executemany("""
+                    INSERT INTO fee_payments (fee_item_id, member_name, student_id, status, paid_amount, paid_date, memo)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, sample_members)
         
     conn.commit()
     conn.close()

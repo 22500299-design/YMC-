@@ -35,6 +35,9 @@
                 <a class="nav-item active" data-target="dashboard">
                     <i class="fa-solid fa-chart-line"></i> 대시보드
                 </a>
+                <a class="nav-item" data-target="dues">
+                    <i class="fa-solid fa-coins"></i> 회비 관리
+                </a>
                 <a class="nav-item" data-target="income">
                     <i class="fa-solid fa-wallet"></i> 수입 관리
                 </a>
@@ -160,6 +163,150 @@
                             style="flex: 1; display: flex; align-items: center; justify-content: center;">
                             <canvas id="dashboard-summary-chart" style="max-height: 240px; max-width: 240px;"></canvas>
                         </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 1-2. DUES MANAGEMENT VIEW -->
+            <section id="dues-section" class="content-section">
+                <!-- Fee Items Selector Header Bar -->
+                <div class="glass-panel dues-header-card">
+                    <div class="dues-top-bar">
+                        <div class="dues-tabs-wrapper">
+                            <span class="dues-tabs-label"><i class="fa-solid fa-list-check"></i> 회비 항목:</span>
+                            <div class="dues-tabs-list" id="dues-items-tabs">
+                                <!-- Dynamic Fee Item Tabs -->
+                            </div>
+                        </div>
+                        <div class="dues-header-actions">
+                            <button class="btn btn-primary btn-sm" id="add-fee-item-btn">
+                                <i class="fa-solid fa-plus"></i> 새 회비 항목 등록
+                            </button>
+                            <button class="btn btn-secondary btn-sm" id="edit-fee-item-btn" title="현재 회비 항목 정보 수정">
+                                <i class="fa-solid fa-pen"></i> 항목 수정
+                            </button>
+                            <button class="btn btn-danger btn-sm" id="delete-fee-item-btn" title="현재 회비 항목 삭제">
+                                <i class="fa-solid fa-trash"></i> 삭제
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Selected Fee Item Info Banner -->
+                    <div class="dues-info-banner" id="dues-item-info-banner">
+                        <div class="dues-info-meta">
+                            <h3 id="dues-selected-title">2026 1학기 정기회비</h3>
+                            <div class="dues-tags">
+                                <span class="badge" id="dues-selected-type">정기 회비</span>
+                                <span class="badge badge-event" id="dues-selected-event" style="display: none;">연계 행사</span>
+                                <span class="dues-info-item"><i class="fa-solid fa-coins"></i> 1인당: <strong id="dues-selected-target-amount">20,000원</strong></span>
+                                <span class="dues-info-item"><i class="fa-solid fa-calendar-check"></i> 마감일: <strong id="dues-selected-due-date">2026-03-31</strong></span>
+                            </div>
+                        </div>
+                        <div class="dues-info-desc" id="dues-selected-description">
+                            1학기 동아리 기본 활동 및 운영 회비
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dues Summary Stats Grid -->
+                <div class="stats-grid dues-stats-grid">
+                    <div class="stat-card glass-panel" style="--card-color: var(--primary);">
+                        <div class="stat-header">
+                            <span>총 대상 인원</span>
+                            <i class="fa-solid fa-users"></i>
+                        </div>
+                        <div class="stat-value" id="dues-stat-total-members">0명</div>
+                        <div class="stat-change"><i class="fa-solid fa-clipboard-user"></i> 등록된 부원 기준</div>
+                    </div>
+                    <div class="stat-card glass-panel" style="--card-color: var(--success);">
+                        <div class="stat-header">
+                            <span>납부 완료</span>
+                            <i class="fa-solid fa-circle-check"></i>
+                        </div>
+                        <div class="stat-value" id="dues-stat-paid-members" style="color: var(--success);">0명</div>
+                        <div class="stat-change up" id="dues-stat-paid-rate"><i class="fa-solid fa-chart-pie"></i> 달성률 0%</div>
+                    </div>
+                    <div class="stat-card glass-panel" style="--card-color: var(--danger);">
+                        <div class="stat-header">
+                            <span>미납 인원</span>
+                            <i class="fa-solid fa-clock"></i>
+                        </div>
+                        <div class="stat-value" id="dues-stat-unpaid-members" style="color: var(--danger);">0명</div>
+                        <div class="stat-change down" id="dues-stat-unpaid-change"><i class="fa-solid fa-bell"></i> 납부 확인 필요</div>
+                    </div>
+                    <div class="stat-card glass-panel" style="--card-color: var(--secondary);">
+                        <div class="stat-header">
+                            <span>총 수납액 / 목표액</span>
+                            <i class="fa-solid fa-sack-dollar"></i>
+                        </div>
+                        <div class="stat-value" id="dues-stat-paid-amount">0원</div>
+                        <div class="stat-change" id="dues-stat-target-amount" style="color: var(--text-secondary);">
+                            목표: 0원
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Progress Bar Card -->
+                <div class="glass-panel dues-progress-card">
+                    <div class="dues-progress-header">
+                        <span><i class="fa-solid fa-battery-half"></i> 회비 수납 진행률</span>
+                        <strong id="dues-progress-percent">0%</strong>
+                    </div>
+                    <div class="progress-bar-container dues-progress-bar-wrap">
+                        <div class="progress-bar" id="dues-progress-bar" style="width: 0%; background: linear-gradient(90deg, #10b981, #059669);"></div>
+                    </div>
+                </div>
+
+                <!-- Action & Filter Bar -->
+                <div class="filter-bar dues-filter-bar">
+                    <input type="text" id="dues-member-search" class="search-input" placeholder="부원 성명 또는 학번 검색...">
+                    <select id="dues-status-filter">
+                        <option value="">모든 납부 상태</option>
+                        <option value="납부 완료">납부 완료</option>
+                        <option value="미납">미납</option>
+                        <option value="면제">면제</option>
+                    </select>
+
+                    <div class="dues-action-buttons">
+                        <button class="btn btn-primary" id="add-dues-member-btn">
+                            <i class="fa-solid fa-user-plus"></i> 부원 추가
+                        </button>
+                        <button class="btn btn-secondary" id="batch-add-members-btn" title="카카오톡/엑셀 명단을 복사해 한번에 등록">
+                            <i class="fa-solid fa-paste"></i> 명단 일괄 등록
+                        </button>
+                        <button class="btn btn-secondary" id="copy-members-btn" title="다른 회비 항목의 명단을 그대로 가져오기">
+                            <i class="fa-solid fa-people-arrows"></i> 명단 가져오기
+                        </button>
+                        <button class="btn btn-secondary" id="copy-unpaid-text-btn" title="단체 카톡방 공지용 미납자 명단 텍스트 복사">
+                            <i class="fa-solid fa-bullhorn"></i> 미납자 명단 복사
+                        </button>
+                        <button class="btn btn-primary" id="sync-income-btn" style="background: linear-gradient(135deg, #059669, #10b981);" title="현재까지 납부 완료된 금액을 수입 관리 장부에 자동 반영">
+                            <i class="fa-solid fa-file-import"></i> 수입 장부 반영
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Members Dues Table -->
+                <div class="glass-panel">
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width: 50px;">No</th>
+                                    <th>부원 성명</th>
+                                    <th>학번 / 구분</th>
+                                    <th>기준 회비</th>
+                                    <th>납부 금액</th>
+                                    <th>납부 일자</th>
+                                    <th style="text-align: center;">납부 상태 (클릭 시 토글)</th>
+                                    <th>메모 / 비고</th>
+                                    <th style="text-align: center; width: 110px;">작업</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dues-table-body">
+                                <!-- Dynamic Member Rows -->
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </section>
@@ -797,6 +944,184 @@
                         <button class="btn btn-secondary" type="button" onclick="closeModal('settle-modal')">취소</button>
                         <button class="btn btn-primary" type="submit" id="settle-form-submit-btn"
                             style="background: var(--success); color: white;">결산 완료 확정</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 7: ADD/EDIT FEE ITEM -->
+    <div id="dues-item-modal" class="modal">
+        <div class="glass-panel modal-content" style="max-width: 500px;">
+            <div class="panel-header">
+                <span class="panel-title" id="dues-item-modal-title">새 회비 항목 등록</span>
+                <i class="fa-solid fa-xmark modal-close" onclick="closeModal('dues-item-modal')"></i>
+            </div>
+            <div class="panel-body">
+                <form id="dues-item-form" onsubmit="return false;">
+                    <input type="hidden" id="dues-item-modal-id">
+
+                    <div class="form-group">
+                        <label for="dues-item-modal-title-input">회비 명칭 *</label>
+                        <input type="text" id="dues-item-modal-title-input" placeholder="예: 2026 1학기 정기회비, 봄 MT 참가비" required>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="dues-item-modal-type">회비 유형 *</label>
+                            <select id="dues-item-modal-type" required>
+                                <option value="정기 회비">정기 회비 (연간 2회 등)</option>
+                                <option value="행사 회비">행사 회비 (MT, 수련회 등)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="dues-item-modal-event">연계 행사 (선택)</label>
+                            <select id="dues-item-modal-event">
+                                <option value="">연계 행사 없음 (공통/정기)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="dues-item-modal-amount">1인당 기준 회비 (원) *</label>
+                            <input type="number" id="dues-item-modal-amount" placeholder="예: 20000" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="dues-item-modal-due-date">납부 마감일</label>
+                            <input type="date" id="dues-item-modal-due-date">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="dues-item-modal-description">안내 사항 및 계좌 정보 (비고)</label>
+                        <textarea id="dues-item-modal-description" rows="3" placeholder="예: 카카오뱅크 3333-xx-xxxxxx 홍길동 / 부원 활동비 포함"></textarea>
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+                        <button class="btn btn-secondary" type="button" onclick="closeModal('dues-item-modal')">취소</button>
+                        <button class="btn btn-primary" type="submit">저장</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 8: ADD/EDIT DUES MEMBER -->
+    <div id="dues-member-modal" class="modal">
+        <div class="glass-panel modal-content" style="max-width: 480px;">
+            <div class="panel-header">
+                <span class="panel-title" id="dues-member-modal-title">부원 회비 정보</span>
+                <i class="fa-solid fa-xmark modal-close" onclick="closeModal('dues-member-modal')"></i>
+            </div>
+            <div class="panel-body">
+                <form id="dues-member-form" onsubmit="return false;">
+                    <input type="hidden" id="dues-member-modal-id">
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="dues-member-modal-name">부원 성명 *</label>
+                            <input type="text" id="dues-member-modal-name" placeholder="예: 홍길동" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="dues-member-modal-student-id">학번 / 전공 / 구분</label>
+                            <input type="text" id="dues-member-modal-student-id" placeholder="예: 23학번 / 컴퓨터공학">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="dues-member-modal-status">납부 상태 *</label>
+                            <select id="dues-member-modal-status" required>
+                                <option value="미납">미납</option>
+                                <option value="납부 완료">납부 완료</option>
+                                <option value="면제">면제</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="dues-member-modal-amount">납부 금액 (원) *</label>
+                            <input type="number" id="dues-member-modal-amount" placeholder="금액 입력" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="dues-member-modal-date">납부 일자</label>
+                        <input type="date" id="dues-member-modal-date">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="dues-member-modal-memo">메모 / 비고</label>
+                        <input type="text" id="dues-member-modal-memo" placeholder="예: 입금자명 상이, 분할 납부 등">
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+                        <button class="btn btn-secondary" type="button" onclick="closeModal('dues-member-modal')">취소</button>
+                        <button class="btn btn-primary" type="submit">저장</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 9: BATCH ADD MEMBERS -->
+    <div id="dues-batch-modal" class="modal">
+        <div class="glass-panel modal-content" style="max-width: 520px;">
+            <div class="panel-header">
+                <span class="panel-title"><i class="fa-solid fa-paste"></i> 부원 명단 일괄 붙여넣기</span>
+                <i class="fa-solid fa-xmark modal-close" onclick="closeModal('dues-batch-modal')"></i>
+            </div>
+            <div class="panel-body">
+                <form id="dues-batch-form" onsubmit="return false;">
+                    <p style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.5;">
+                        카카오톡 공지나 엑셀 명단에서 부원 이름을 복사하여 아래 입력창에 붙여넣으세요. <br>
+                        <strong>줄바꿈(Enter)</strong> 또는 <strong>쉼표(,)</strong>로 구분하여 한 번에 여러 명을 등록할 수 있습니다.
+                    </p>
+
+                    <div class="form-group">
+                        <label for="dues-batch-names">부원 이름 목록 *</label>
+                        <textarea id="dues-batch-names" rows="8" placeholder="홍길동
+김철수
+이영희
+박민수" required style="font-family: monospace; font-size: 0.95rem;"></textarea>
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px;">
+                        <button class="btn btn-secondary" type="button" onclick="closeModal('dues-batch-modal')">취소</button>
+                        <button class="btn btn-primary" type="submit" id="dues-batch-submit-btn">
+                            <i class="fa-solid fa-check"></i> 일괄 등록
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 10: COPY MEMBERS FROM OTHER FEE -->
+    <div id="dues-copy-modal" class="modal">
+        <div class="glass-panel modal-content" style="max-width: 460px;">
+            <div class="panel-header">
+                <span class="panel-title"><i class="fa-solid fa-people-arrows"></i> 다른 회비 명단 가져오기</span>
+                <i class="fa-solid fa-xmark modal-close" onclick="closeModal('dues-copy-modal')"></i>
+            </div>
+            <div class="panel-body">
+                <form id="dues-copy-form" onsubmit="return false;">
+                    <p style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.5;">
+                        이전 학기 정기회비나 다른 행사에 등록되었던 부원 명단을 현재 회비로 복사합니다. <br>
+                        (이미 현재 회비에 등록된 부원은 중복 없이 자동으로 제외됩니다.)
+                    </p>
+
+                    <div class="form-group">
+                        <label for="dues-copy-source-select">불러올 회비 항목 선택 *</label>
+                        <select id="dues-copy-source-select" required>
+                            <!-- Dynamic fee items options -->
+                        </select>
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+                        <button class="btn btn-secondary" type="button" onclick="closeModal('dues-copy-modal')">취소</button>
+                        <button class="btn btn-primary" type="submit">
+                            <i class="fa-solid fa-download"></i> 명단 가져오기
+                        </button>
                     </div>
                 </form>
             </div>

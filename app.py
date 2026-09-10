@@ -8,6 +8,7 @@ import shutil
 import email
 import email.message
 import sys
+import datetime
 from db import init_db, get_db_connection
 
 PORT = int(os.environ.get('PORT', 8000))
@@ -219,6 +220,54 @@ class YMCApiHandler(http.server.SimpleHTTPRequestHandler):
                     'pending_receipts': pending_receipts,
                     'event_summaries': event_summaries
                 })
+
+            elif path == '/api/dues/items':
+                # Get fee items with calculated statistics
+                cursor.execute("""
+                    SELECT fi.*, e.name as event_name,
+                           COUNT(fp.id) as total_members,
+                           COALESCE(SUM(CASE WHEN fp.status = '납부 완료' THEN 1 ELSE 0 END), 0) as paid_members,
+                           COALESCE(SUM(CASE WHEN fp.status = '미납' THEN 1 ELSE 0 END), 0) as unpaid_members,
+                           COALESCE(SUM(CASE WHEN fp.status = '면제' THEN 1 ELSE 0 END), 0) as exempt_members,
+                           COALESCE(SUM(fp.paid_amount), 0) as total_paid_amount
+                    FROM fee_items fi
+                    LEFT JOIN event_master e ON fi.event_id = e.id
+                    LEFT JOIN fee_payments fp ON fi.id = fp.fee_item_id
+                    GROUP BY fi.id
+                    ORDER BY fi.id ASC
+                """)
+                rows = cursor.fetchall()
+                fee_items = []
+                for row in rows:
+                    item = dict(row)
+                    total_m = item['total_members'] or 0
+                    paid_m = item['paid_members'] or 0
+                    target_amount = item['target_amount'] or 0
+                    item['target_total_amount'] = total_m * target_amount
+                    item['rate'] = round((paid_m / total_m * 100), 1) if total_m > 0 else 0.0
+                    fee_items.append(item)
+                self.send_json_response(200, fee_items)
+
+            elif path == '/api/dues/payments':
+                fee_item_id = query.get('fee_item_id')
+                if fee_item_id:
+                    cursor.execute("""
+                        SELECT fp.*, fi.title as fee_title, fi.target_amount as item_target_amount
+                        FROM fee_payments fp
+                        JOIN fee_items fi ON fp.fee_item_id = fi.id
+                        WHERE fp.fee_item_id = ?
+                        ORDER BY fp.id ASC
+                    """, (int(fee_item_id[0]),))
+                else:
+                    cursor.execute("""
+                        SELECT fp.*, fi.title as fee_title, fi.target_amount as item_target_amount
+                        FROM fee_payments fp
+                        JOIN fee_items fi ON fp.fee_item_id = fi.id
+                        ORDER BY fp.id DESC
+                    """)
+                payments = [dict(row) for row in cursor.fetchall()]
+                self.send_json_response(200, payments)
+
             else:
                 self.send_error_response(404, "API endpoint not found")
         except Exception as e:
@@ -304,6 +353,149 @@ class YMCApiHandler(http.server.SimpleHTTPRequestHandler):
                 """, (int(event_id), type_, category, description, details, int(amount)))
                 conn.commit()
                 self.send_json_response(201, {'id': cursor.lastrowid, 'status': 'success'})
+
+            elif path == '/api/dues/items':
+                title = data.get('title')
+                type_ = data.get('type', '정기 회비')
+                event_id = data.get('event_id')
+                if event_id:
+                    event_id = int(event_id)
+                target_amount = data.get('target_amount', 0)
+                due_date = data.get('due_date')
+                description = data.get('description', '')
+
+                if not title:
+                    self.send_error_response(400, "회비 명칭은 필수입니다.")
+                    return
+
+                cursor.execute("""
+                    INSERT INTO fee_items (title, type, event_id, target_amount, due_date, description)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (title, type_, event_id, int(target_amount or 0), due_date, description))
+                conn.commit()
+                self.send_json_response(201, {'id': cursor.lastrowid, 'status': 'success'})
+
+            elif path == '/api/dues/payments':
+                fee_item_id = data.get('fee_item_id')
+                if not fee_item_id:
+                    self.send_error_response(400, "회비 항목 ID는 필수입니다.")
+                    return
+
+                cursor.execute("SELECT target_amount FROM fee_items WHERE id = ?", (int(fee_item_id),))
+                fee_item = cursor.fetchone()
+                target_amount = fee_item[0] if fee_item else 0
+
+                members_to_add = []
+                if 'names' in data and data['names']:
+                    raw_names = data['names']
+                    if isinstance(raw_names, str):
+                        raw_list = [n.strip() for n in raw_names.replace(',', '\n').split('\n') if n.strip()]
+                    else:
+                        raw_list = [str(n).strip() for n in raw_names if str(n).strip()]
+                    
+                    for n in raw_list:
+                        members_to_add.append({
+                            'name': n,
+                            'student_id': '',
+                            'status': '미납',
+                            'paid_amount': 0,
+                            'paid_date': None,
+                            'memo': ''
+                        })
+                else:
+                    member_name = data.get('member_name')
+                    if not member_name:
+                        self.send_error_response(400, "부원 성명은 필수입니다.")
+                        return
+                    status = data.get('status', '미납')
+                    paid_amount = data.get('paid_amount')
+                    if paid_amount is None:
+                        paid_amount = target_amount if status == '납부 완료' else 0
+                    paid_date = data.get('paid_date')
+                    if not paid_date and status == '납부 완료':
+                        paid_date = datetime.datetime.now().strftime('%Y-%m-%d')
+                    members_to_add.append({
+                        'name': member_name,
+                        'student_id': data.get('student_id', ''),
+                        'status': status,
+                        'paid_amount': int(paid_amount or 0),
+                        'paid_date': paid_date,
+                        'memo': data.get('memo', '')
+                    })
+
+                for m in members_to_add:
+                    cursor.execute("""
+                        INSERT INTO fee_payments (fee_item_id, member_name, student_id, status, paid_amount, paid_date, memo)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (int(fee_item_id), m['name'], m['student_id'], m['status'], m['paid_amount'], m['paid_date'], m['memo']))
+                
+                conn.commit()
+                self.send_json_response(201, {'added_count': len(members_to_add), 'status': 'success'})
+
+            elif path == '/api/dues/copy-members':
+                source_item_id = data.get('source_item_id')
+                target_item_id = data.get('target_item_id')
+                if not source_item_id or not target_item_id:
+                    self.send_error_response(400, "원본 및 대상 회비 ID는 필수입니다.")
+                    return
+
+                cursor.execute("SELECT member_name FROM fee_payments WHERE fee_item_id = ?", (int(target_item_id),))
+                existing_names = set(row[0] for row in cursor.fetchall())
+
+                cursor.execute("SELECT member_name, student_id FROM fee_payments WHERE fee_item_id = ?", (int(source_item_id),))
+                source_members = cursor.fetchall()
+                
+                copied_count = 0
+                for row in source_members:
+                    name = row[0]
+                    student_id = row[1]
+                    if name not in existing_names:
+                        cursor.execute("""
+                            INSERT INTO fee_payments (fee_item_id, member_name, student_id, status, paid_amount, paid_date, memo)
+                            VALUES (?, ?, ?, '미납', 0, NULL, '')
+                        """, (int(target_item_id), name, student_id))
+                        copied_count += 1
+                
+                conn.commit()
+                self.send_json_response(200, {'copied_count': copied_count, 'status': 'success'})
+
+            elif path == '/api/dues/sync-to-income':
+                fee_item_id = data.get('fee_item_id')
+                if not fee_item_id:
+                    self.send_error_response(400, "회비 항목 ID는 필수입니다.")
+                    return
+
+                cursor.execute("SELECT * FROM fee_items WHERE id = ?", (int(fee_item_id),))
+                fee_item = cursor.fetchone()
+                if not fee_item:
+                    self.send_error_response(404, "회비 항목을 찾을 수 없습니다.")
+                    return
+                fee_item = dict(fee_item)
+
+                cursor.execute("""
+                    SELECT COUNT(*) as paid_count, COALESCE(SUM(paid_amount), 0) as total_paid
+                    FROM fee_payments
+                    WHERE fee_item_id = ? AND status = '납부 완료'
+                """, (int(fee_item_id),))
+                stat = dict(cursor.fetchone())
+                total_paid = stat['total_paid']
+                paid_count = stat['paid_count']
+
+                if total_paid <= 0:
+                    self.send_error_response(400, "납부 완료된 금액이 없어 수입 장부에 반영할 내역이 없습니다.")
+                    return
+
+                today_str = datetime.datetime.now().strftime('%Y-%m-%d')
+                description = f"[{fee_item['title']}] 납부 회비 정산"
+                basis = f"납부 완료 {paid_count}명 기준 (총 {total_paid:,}원)"
+                payer_name = f"동아리 부원 ({paid_count}명)"
+
+                cursor.execute("""
+                    INSERT INTO income_management (category, event_id, description, amount, basis, remarks, transaction_date, payer_name)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, ('회비', fee_item['event_id'], description, total_paid, basis, f"{fee_item['title']} 납부 관리 자동 연동", today_str, payer_name))
+                conn.commit()
+                self.send_json_response(201, {'status': 'success', 'income_id': cursor.lastrowid, 'amount': total_paid})
             
             else:
                 self.send_error_response(404, "API endpoint not found")
@@ -424,6 +616,90 @@ class YMCApiHandler(http.server.SimpleHTTPRequestHandler):
                 """, (int(event_id), type_, category, description, details, int(amount), int(id_)))
                 conn.commit()
                 self.send_json_response(200, {'status': 'success'})
+
+            elif path == '/api/dues/items':
+                id_ = data.get('id')
+                title = data.get('title')
+                type_ = data.get('type')
+                event_id = data.get('event_id')
+                if event_id:
+                    event_id = int(event_id)
+                target_amount = data.get('target_amount')
+                due_date = data.get('due_date')
+                description = data.get('description')
+
+                if not id_ or not title:
+                    self.send_error_response(400, "ID와 회비명은 필수입니다.")
+                    return
+
+                cursor.execute("""
+                    UPDATE fee_items
+                    SET title = ?, type = ?, event_id = ?, target_amount = ?, due_date = ?, description = ?
+                    WHERE id = ?
+                """, (title, type_, event_id, int(target_amount or 0), due_date, description, int(id_)))
+                conn.commit()
+                self.send_json_response(200, {'status': 'success'})
+
+            elif path == '/api/dues/payments':
+                id_ = data.get('id')
+                member_name = data.get('member_name')
+                student_id = data.get('student_id', '')
+                status = data.get('status')
+                paid_amount = data.get('paid_amount', 0)
+                paid_date = data.get('paid_date')
+                memo = data.get('memo', '')
+
+                if not id_ or not member_name:
+                    self.send_error_response(400, "ID와 부원 성명은 필수입니다.")
+                    return
+
+                cursor.execute("""
+                    UPDATE fee_payments
+                    SET member_name = ?, student_id = ?, status = ?, paid_amount = ?, paid_date = ?, memo = ?
+                    WHERE id = ?
+                """, (member_name, student_id, status, int(paid_amount or 0), paid_date, memo, int(id_)))
+                conn.commit()
+                self.send_json_response(200, {'status': 'success'})
+
+            elif path == '/api/dues/payments/toggle':
+                id_ = data.get('id')
+                if not id_:
+                    self.send_error_response(400, "ID는 필수입니다.")
+                    return
+
+                cursor.execute("""
+                    SELECT fp.*, fi.target_amount
+                    FROM fee_payments fp
+                    JOIN fee_items fi ON fp.fee_item_id = fi.id
+                    WHERE fp.id = ?
+                """, (int(id_),))
+                row = cursor.fetchone()
+                if not row:
+                    self.send_error_response(404, "납부 기록을 찾을 수 없습니다.")
+                    return
+                payment = dict(row)
+
+                if payment['status'] == '납부 완료':
+                    new_status = '미납'
+                    new_amount = 0
+                    new_date = None
+                else:
+                    new_status = '납부 완료'
+                    new_amount = payment['target_amount'] or payment['paid_amount'] or 0
+                    new_date = datetime.datetime.now().strftime('%Y-%m-%d')
+
+                cursor.execute("""
+                    UPDATE fee_payments
+                    SET status = ?, paid_amount = ?, paid_date = ?
+                    WHERE id = ?
+                """, (new_status, new_amount, new_date, int(id_)))
+                conn.commit()
+                self.send_json_response(200, {
+                    'status': 'success',
+                    'new_status': new_status,
+                    'paid_amount': new_amount,
+                    'paid_date': new_date
+                })
             
             else:
                 self.send_error_response(404, "API endpoint not found")
@@ -455,6 +731,16 @@ class YMCApiHandler(http.server.SimpleHTTPRequestHandler):
 
             elif path == '/api/budgets':
                 cursor.execute("DELETE FROM budget_planning WHERE id = ?", (id_,))
+                conn.commit()
+                self.send_json_response(200, {'status': 'success'})
+
+            elif path == '/api/dues/items':
+                cursor.execute("DELETE FROM fee_items WHERE id = ?", (id_,))
+                conn.commit()
+                self.send_json_response(200, {'status': 'success'})
+
+            elif path == '/api/dues/payments':
+                cursor.execute("DELETE FROM fee_payments WHERE id = ?", (id_,))
                 conn.commit()
                 self.send_json_response(200, {'status': 'success'})
 

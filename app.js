@@ -9,6 +9,11 @@ let comparisonRecords = [];
 let dashboardStats = null;
 let summaryChart = null;
 
+// Dues Global State
+let feeItems = [];
+let selectedFeeItemId = null;
+let currentDuesPayments = [];
+
 // API Base URL
 const API_BASE = '/api';
 
@@ -64,6 +69,7 @@ function initNavigation() {
 
     const viewMeta = {
         dashboard: { title: '대시보드', subtitle: '동아리 회계 정보 통합 대시보드' },
+        dues: { title: '회비 관리', subtitle: '연간 2회 정기회비 및 행사별 회비 납부 현황 실시간 관리' },
         events: { title: '행사 마스터', subtitle: '행사 정보 등록 및 기본 마스터 정보 관리' },
         budgets: { title: '예산 계획', subtitle: '행사별 예상 수입 및 지출 한도 설정' },
         income: { title: '수입 관리', subtitle: '회비, 지원금, 후원금 등 수입 내역 관리' },
@@ -99,6 +105,8 @@ function initNavigation() {
             // Refresh data for specific views
             if (target === 'dashboard') {
                 fetchDashboardStats();
+            } else if (target === 'dues') {
+                fetchFeeItems(selectedFeeItemId);
             } else if (target === 'budgets') {
                 fetchBudgets();
             } else if (target === 'settlements') {
@@ -181,7 +189,8 @@ async function fetchAllData() {
             fetchIncome(),
             fetchExpenditures(),
             fetchBudgets(),
-            fetchDashboardStats()
+            fetchDashboardStats(),
+            fetchFeeItems()
         ]);
     } catch (err) {
         showToast('데이터를 불러오는 데 실패했습니다.', 'error');
@@ -303,6 +312,7 @@ function populateEventDropdowns() {
         document.getElementById('income-modal-event'),
         document.getElementById('expenditure-modal-event'),
         document.getElementById('budget-modal-event'),
+        document.getElementById('dues-item-modal-event'),
         document.getElementById('form-event-id'),
         document.getElementById('income-filter-event'),
         document.getElementById('expenditure-filter-event'),
@@ -793,7 +803,43 @@ function initEventListeners() {
         openModal('expenditure-modal');
     });
 
-    document.getElementById('add-budget-btn').addEventListener('click', () => openBudgetModal());
+    const addBudgetBtn = document.getElementById('add-budget-btn');
+    if (addBudgetBtn) addBudgetBtn.addEventListener('click', () => openBudgetModal());
+
+    // Dues filters & search
+    const duesSearch = document.getElementById('dues-member-search');
+    if (duesSearch) duesSearch.addEventListener('input', renderDuesPaymentsTable);
+    const duesStatusFilter = document.getElementById('dues-status-filter');
+    if (duesStatusFilter) duesStatusFilter.addEventListener('change', renderDuesPaymentsTable);
+
+    // Dues actions & modal triggers
+    const addFeeBtn = document.getElementById('add-fee-item-btn');
+    if (addFeeBtn) addFeeBtn.addEventListener('click', openAddFeeItemModal);
+    const editFeeBtn = document.getElementById('edit-fee-item-btn');
+    if (editFeeBtn) editFeeBtn.addEventListener('click', openEditFeeItemModal);
+    const delFeeBtn = document.getElementById('delete-fee-item-btn');
+    if (delFeeBtn) delFeeBtn.addEventListener('click', deleteCurrentFeeItem);
+
+    const addDuesMemberBtn = document.getElementById('add-dues-member-btn');
+    if (addDuesMemberBtn) addDuesMemberBtn.addEventListener('click', openAddDuesMemberModal);
+    const batchAddBtn = document.getElementById('batch-add-members-btn');
+    if (batchAddBtn) batchAddBtn.addEventListener('click', openBatchAddMembersModal);
+    const copyMembersBtn = document.getElementById('copy-members-btn');
+    if (copyMembersBtn) copyMembersBtn.addEventListener('click', openCopyMembersModal);
+    const copyUnpaidBtn = document.getElementById('copy-unpaid-text-btn');
+    if (copyUnpaidBtn) copyUnpaidBtn.addEventListener('click', copyUnpaidMembersText);
+    const syncIncomeBtn = document.getElementById('sync-income-btn');
+    if (syncIncomeBtn) syncIncomeBtn.addEventListener('click', syncDuesToIncome);
+
+    // Dues form submissions
+    const duesItemForm = document.getElementById('dues-item-form');
+    if (duesItemForm) duesItemForm.addEventListener('submit', handleFeeItemSubmit);
+    const duesMemberForm = document.getElementById('dues-member-form');
+    if (duesMemberForm) duesMemberForm.addEventListener('submit', handleDuesMemberSubmit);
+    const duesBatchForm = document.getElementById('dues-batch-form');
+    if (duesBatchForm) duesBatchForm.addEventListener('submit', handleBatchAddSubmit);
+    const duesCopyForm = document.getElementById('dues-copy-form');
+    if (duesCopyForm) duesCopyForm.addEventListener('submit', handleCopyMembersSubmit);
 
     // Report export triggers
     document.getElementById('export-ledger-btn').addEventListener('click', exportTransactionLedger);
@@ -1553,4 +1599,723 @@ function escapeHTML(str) {
 function escapeQuote(str) {
     if (!str) return '';
     return String(str).replace(/'/g, "\\'").replace(/"/g, '\\"');
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── DUES MANAGEMENT CORE FUNCTIONS ──
+// ══════════════════════════════════════════════════════════════════════════
+
+// Fetch All Fee Items
+async function fetchFeeItems(preferredId = null) {
+    try {
+        const response = await fetch(`${API_BASE}/dues/items`);
+        if (!response.ok) throw new Error('회비 항목 조회 실패');
+        feeItems = await response.json();
+
+        renderFeeItemTabs();
+
+        if (feeItems.length > 0) {
+            let targetId = preferredId;
+            if (!targetId || !feeItems.find(f => f.id === targetId)) {
+                targetId = (selectedFeeItemId && feeItems.find(f => f.id === selectedFeeItemId)) 
+                    ? selectedFeeItemId 
+                    : feeItems[0].id;
+            }
+            await selectFeeItem(targetId);
+        } else {
+            selectedFeeItemId = null;
+            currentDuesPayments = [];
+            renderDuesPaymentsTable();
+            updateDuesSummaryCards(null, []);
+        }
+    } catch (err) {
+        console.error('Fetch fee items error:', err);
+    }
+}
+
+// Render Fee Item Tabs Bar
+function renderFeeItemTabs() {
+    const tabsContainer = document.getElementById('dues-items-tabs');
+    if (!tabsContainer) return;
+    tabsContainer.innerHTML = '';
+
+    if (feeItems.length === 0) {
+        tabsContainer.innerHTML = '<span style="font-size: 0.85rem; color: var(--text-muted); padding: 6px 0;">등록된 회비 항목이 없습니다.</span>';
+        return;
+    }
+
+    feeItems.forEach(item => {
+        const btn = document.createElement('button');
+        btn.className = `dues-tab-btn ${item.id === selectedFeeItemId ? 'active' : ''}`;
+        btn.type = 'button';
+
+        const isRegular = item.type === '정기 회비';
+        const badgeClass = isRegular ? 'tab-badge' : 'tab-badge badge-event';
+        const badgeText = isRegular ? '정기' : '행사';
+
+        btn.innerHTML = `
+            <span>${escapeHTML(item.title)}</span>
+            <span class="${badgeClass}">${badgeText}</span>
+        `;
+
+        btn.addEventListener('click', () => {
+            selectFeeItem(item.id);
+        });
+
+        tabsContainer.appendChild(btn);
+    });
+}
+
+// Select a Specific Fee Item and load its payments
+async function selectFeeItem(id) {
+    selectedFeeItemId = id;
+
+    // Update active class on tabs
+    const tabs = document.querySelectorAll('.dues-tab-btn');
+    feeItems.forEach((item, index) => {
+        if (tabs[index]) {
+            if (item.id === id) {
+                tabs[index].classList.add('active');
+            } else {
+                tabs[index].classList.remove('active');
+            }
+        }
+    });
+
+    const currentItem = feeItems.find(f => f.id === id);
+    if (!currentItem) return;
+
+    // Update Selected Fee Item Info Banner
+    const titleEl = document.getElementById('dues-selected-title');
+    const typeEl = document.getElementById('dues-selected-type');
+    const eventEl = document.getElementById('dues-selected-event');
+    const targetAmountEl = document.getElementById('dues-selected-target-amount');
+    const dueDateEl = document.getElementById('dues-selected-due-date');
+    const descEl = document.getElementById('dues-selected-description');
+
+    if (titleEl) titleEl.textContent = currentItem.title;
+    if (typeEl) {
+        typeEl.textContent = currentItem.type;
+        typeEl.className = currentItem.type === '정기 회비' ? 'badge' : 'badge badge-event';
+    }
+    if (eventEl) {
+        if (currentItem.event_name) {
+            eventEl.style.display = 'inline-flex';
+            eventEl.textContent = `연계 행사: ${currentItem.event_name}`;
+        } else {
+            eventEl.style.display = 'none';
+        }
+    }
+    if (targetAmountEl) targetAmountEl.textContent = formatCurrency(currentItem.target_amount);
+    if (dueDateEl) dueDateEl.textContent = currentItem.due_date || '기한 없음';
+    if (descEl) descEl.textContent = currentItem.description || '(안내 및 비고 사항 없음)';
+
+    // Fetch Payments for this item
+    try {
+        const response = await fetch(`${API_BASE}/dues/payments?fee_item_id=${id}`);
+        if (!response.ok) throw new Error('납부 내역 조회 실패');
+        currentDuesPayments = await response.json();
+
+        updateDuesSummaryCards(currentItem, currentDuesPayments);
+        renderDuesPaymentsTable();
+    } catch (err) {
+        console.error('Fetch dues payments error:', err);
+        showToast('회비 납부 내역을 불러오지 못했습니다.', 'error');
+    }
+}
+
+// Update Summary Stats Cards and Progress Bar
+function updateDuesSummaryCards(item, payments) {
+    const totalEl = document.getElementById('dues-stat-total-members');
+    const paidEl = document.getElementById('dues-stat-paid-members');
+    const paidRateEl = document.getElementById('dues-stat-paid-rate');
+    const unpaidEl = document.getElementById('dues-stat-unpaid-members');
+    const paidAmountEl = document.getElementById('dues-stat-paid-amount');
+    const targetAmountEl = document.getElementById('dues-stat-target-amount');
+    const progressPercentEl = document.getElementById('dues-progress-percent');
+    const progressBarEl = document.getElementById('dues-progress-bar');
+
+    if (!item) {
+        if (totalEl) totalEl.textContent = '0명';
+        if (paidEl) paidEl.textContent = '0명';
+        if (unpaidEl) unpaidEl.textContent = '0명';
+        if (paidAmountEl) paidAmountEl.textContent = '0원';
+        if (progressBarEl) progressBarEl.style.width = '0%';
+        return;
+    }
+
+    const totalMembers = payments.length;
+    const paidMembers = payments.filter(p => p.status === '납부 완료').length;
+    const unpaidMembers = payments.filter(p => p.status === '미납').length;
+    const totalPaidAmount = payments.reduce((acc, cur) => acc + (Number(cur.paid_amount) || 0), 0);
+    const targetTotalAmount = totalMembers * (Number(item.target_amount) || 0);
+    const rate = totalMembers > 0 ? Math.round((paidMembers / totalMembers) * 100) : 0;
+
+    if (totalEl) totalEl.textContent = `${totalMembers}명`;
+    if (paidEl) paidEl.textContent = `${paidMembers}명`;
+    if (paidRateEl) paidRateEl.innerHTML = `<i class="fa-solid fa-chart-pie"></i> 달성률 ${rate}%`;
+    if (unpaidEl) unpaidEl.textContent = `${unpaidMembers}명`;
+    if (paidAmountEl) paidAmountEl.textContent = formatCurrency(totalPaidAmount);
+    if (targetAmountEl) targetAmountEl.textContent = `목표: ${formatCurrency(targetTotalAmount)}`;
+    if (progressPercentEl) progressPercentEl.textContent = `${rate}%`;
+    if (progressBarEl) progressBarEl.style.width = `${rate}%`;
+}
+
+// Render Members Dues Table with Instant 1-Click Toggle Status
+function renderDuesPaymentsTable() {
+    const tbody = document.getElementById('dues-table-body');
+    if (!tbody) return;
+
+    const searchInput = document.getElementById('dues-member-search');
+    const statusSelect = document.getElementById('dues-status-filter');
+
+    const searchVal = searchInput ? searchInput.value.trim().toLowerCase() : '';
+    const statusVal = statusSelect ? statusSelect.value : '';
+
+    tbody.innerHTML = '';
+
+    if (!currentDuesPayments || currentDuesPayments.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="9" style="text-align: center; padding: 40px 20px; color: var(--text-muted);">
+                    <i class="fa-solid fa-user-slash" style="font-size: 2rem; margin-bottom: 8px; opacity: 0.5;"></i>
+                    <p>현재 등록된 부원이 없습니다. <br><strong>[+ 부원 추가]</strong> 또는 <strong>[명단 일괄 등록]</strong> 버튼으로 대상자를 등록해보세요.</p>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    const filtered = currentDuesPayments.filter(p => {
+        const matchesSearch = !searchVal || 
+            (p.member_name && p.member_name.toLowerCase().includes(searchVal)) ||
+            (p.student_id && p.student_id.toLowerCase().includes(searchVal)) ||
+            (p.memo && p.memo.toLowerCase().includes(searchVal));
+        const matchesStatus = !statusVal || p.status === statusVal;
+        return matchesSearch && matchesStatus;
+    });
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="9" style="text-align: center; padding: 30px; color: var(--text-muted);">
+                    검색 조건과 일치하는 부원이 없습니다.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    filtered.forEach((p, idx) => {
+        const tr = document.createElement('tr');
+
+        // Determine status toggle styling
+        let statusClass = 'status-unpaid';
+        let statusIcon = 'fa-circle-xmark';
+        if (p.status === '납부 완료') {
+            statusClass = 'status-paid';
+            statusIcon = 'fa-circle-check';
+        } else if (p.status === '면제') {
+            statusClass = 'status-exempt';
+            statusIcon = 'fa-circle-minus';
+        }
+
+        tr.innerHTML = `
+            <td style="color: var(--text-muted); font-size: 0.85rem;">${idx + 1}</td>
+            <td style="font-weight: 600; color: var(--primary);">${escapeHTML(p.member_name)}</td>
+            <td style="color: var(--text-secondary); font-size: 0.88rem;">${escapeHTML(p.student_id || '-')}</td>
+            <td style="color: var(--text-secondary);">${formatCurrency(p.item_target_amount || 0)}</td>
+            <td style="font-weight: 600; color: ${p.status === '납부 완료' ? 'var(--success)' : 'var(--text-primary)'};">
+                ${formatCurrency(p.paid_amount || 0)}
+            </td>
+            <td style="font-size: 0.85rem; color: var(--text-secondary);">${p.paid_date || '-'}</td>
+            <td style="text-align: center;">
+                <button type="button" class="dues-status-toggle ${statusClass}" 
+                        onclick="toggleDuesPaymentStatus(${p.id})"
+                        title="클릭 시 납부 완료/미납 상태가 바로 변경됩니다">
+                    <i class="fa-solid ${statusIcon}"></i>
+                    <span>${p.status}</span>
+                </button>
+            </td>
+            <td style="font-size: 0.85rem; color: var(--text-secondary); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                ${escapeHTML(p.memo || '-')}
+            </td>
+            <td style="text-align: center;">
+                <div style="display: inline-flex; gap: 6px;">
+                    <button class="btn btn-secondary btn-sm" onclick="openEditDuesMemberModal(${p.id})" title="수정" style="padding: 4px 8px;">
+                        <i class="fa-solid fa-pen"></i>
+                    </button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteDuesMember(${p.id})" title="삭제" style="padding: 4px 8px;">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            </td>
+        `;
+
+        tbody.appendChild(tr);
+    });
+}
+
+// 1-Click Instant Toggle Status
+async function toggleDuesPaymentStatus(paymentId) {
+    try {
+        const response = await fetch(`${API_BASE}/dues/payments/toggle`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: paymentId })
+        });
+
+        if (!response.ok) throw new Error('상태 변경 실패');
+        const result = await response.json();
+
+        const statusMsg = result.new_status === '납부 완료' ? '✅ 납부 완료' : '⏳ 미납';
+        showToast(`납부 상태가 [${statusMsg}]로 변경되었습니다.`, 'success');
+
+        // Refresh payments for current item
+        if (selectedFeeItemId) {
+            await selectFeeItem(selectedFeeItemId);
+        }
+    } catch (err) {
+        console.error('Toggle status error:', err);
+        showToast('납부 상태 변경 중 오류가 발생했습니다.', 'error');
+    }
+}
+
+// Modal Trigger: Add New Fee Item
+function openAddFeeItemModal() {
+    document.getElementById('dues-item-modal-title').textContent = '새 회비 항목 개설';
+    document.getElementById('dues-item-modal-id').value = '';
+    document.getElementById('dues-item-form').reset();
+
+    // Default due date: 1 month later
+    const nextMonth = new Date();
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    document.getElementById('dues-item-modal-due-date').value = nextMonth.toISOString().slice(0, 10);
+    document.getElementById('dues-item-modal-amount').value = 20000;
+
+    openModal('dues-item-modal');
+}
+
+// Modal Trigger: Edit Current Fee Item
+function openEditFeeItemModal() {
+    if (!selectedFeeItemId) {
+        showToast('수정할 회비 항목이 없습니다.', 'warning');
+        return;
+    }
+    const item = feeItems.find(f => f.id === selectedFeeItemId);
+    if (!item) return;
+
+    document.getElementById('dues-item-modal-title').textContent = '회비 항목 정보 수정';
+    document.getElementById('dues-item-modal-id').value = item.id;
+    document.getElementById('dues-item-modal-title-input').value = item.title || '';
+    document.getElementById('dues-item-modal-type').value = item.type || '정기 회비';
+    document.getElementById('dues-item-modal-event').value = item.event_id || '';
+    document.getElementById('dues-item-modal-amount').value = item.target_amount || 0;
+    document.getElementById('dues-item-modal-due-date').value = item.due_date || '';
+    document.getElementById('dues-item-modal-description').value = item.description || '';
+
+    openModal('dues-item-modal');
+}
+
+// Handle Fee Item Submit (Add / Edit)
+async function handleFeeItemSubmit(e) {
+    e.preventDefault();
+    const id = document.getElementById('dues-item-modal-id').value;
+    const title = document.getElementById('dues-item-modal-title-input').value.trim();
+    const type = document.getElementById('dues-item-modal-type').value;
+    const event_id = document.getElementById('dues-item-modal-event').value || null;
+    const target_amount = Number(document.getElementById('dues-item-modal-amount').value) || 0;
+    const due_date = document.getElementById('dues-item-modal-due-date').value || null;
+    const description = document.getElementById('dues-item-modal-description').value.trim();
+
+    if (!title) {
+        showToast('회비 명칭을 입력해주세요.', 'warning');
+        return;
+    }
+
+    const payload = { title, type, event_id, target_amount, due_date, description };
+    const method = id ? 'PUT' : 'POST';
+    if (id) payload.id = Number(id);
+
+    try {
+        const response = await fetch(`${API_BASE}/dues/items`, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) throw new Error('회비 항목 저장 실패');
+        const resData = await response.json();
+
+        closeModal('dues-item-modal');
+        showToast(id ? '회비 항목 정보가 수정되었습니다.' : '새 회비 항목이 개설되었습니다.', 'success');
+
+        const nextSelectedId = id ? Number(id) : resData.id;
+        await fetchFeeItems(nextSelectedId);
+    } catch (err) {
+        console.error('Fee item save error:', err);
+        showToast('회비 항목 저장에 실패했습니다.', 'error');
+    }
+}
+
+// Delete Current Fee Item
+async function deleteCurrentFeeItem() {
+    if (!selectedFeeItemId) return;
+    const item = feeItems.find(f => f.id === selectedFeeItemId);
+    if (!item) return;
+
+    if (!confirm(`'${item.title}' 회비 항목과 부원 납부 기록을 정말 삭제하시겠습니까?`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/dues/items?id=${selectedFeeItemId}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) throw new Error('회비 항목 삭제 실패');
+
+        showToast(`'${item.title}' 회비 항목이 삭제되었습니다.`, 'success');
+        selectedFeeItemId = null;
+        await fetchFeeItems();
+    } catch (err) {
+        console.error('Delete fee item error:', err);
+        showToast('회비 항목 삭제에 실패했습니다.', 'error');
+    }
+}
+
+// Modal Trigger: Add Dues Member
+function openAddDuesMemberModal() {
+    if (!selectedFeeItemId) {
+        showToast('먼저 회비 항목을 개설하거나 선택해주세요.', 'warning');
+        return;
+    }
+    const currentItem = feeItems.find(f => f.id === selectedFeeItemId);
+    const targetAmt = currentItem ? currentItem.target_amount : 20000;
+
+    document.getElementById('dues-member-modal-title').textContent = '부원 회비 추가';
+    document.getElementById('dues-member-modal-id').value = '';
+    document.getElementById('dues-member-form').reset();
+
+    document.getElementById('dues-member-modal-status').value = '미납';
+    document.getElementById('dues-member-modal-amount').value = 0;
+    document.getElementById('dues-member-modal-date').value = '';
+
+    // If status changes to paid, auto fill amount and date
+    const statusSelect = document.getElementById('dues-member-modal-status');
+    statusSelect.onchange = () => {
+        if (statusSelect.value === '납부 완료') {
+            document.getElementById('dues-member-modal-amount').value = targetAmt;
+            document.getElementById('dues-member-modal-date').value = new Date().toISOString().slice(0, 10);
+        } else if (statusSelect.value === '미납') {
+            document.getElementById('dues-member-modal-amount').value = 0;
+            document.getElementById('dues-member-modal-date').value = '';
+        }
+    };
+
+    openModal('dues-member-modal');
+}
+
+// Modal Trigger: Edit Dues Member
+function openEditDuesMemberModal(paymentId) {
+    const payment = currentDuesPayments.find(p => p.id === paymentId);
+    if (!payment) return;
+
+    document.getElementById('dues-member-modal-title').textContent = '부원 회비 정보 수정';
+    document.getElementById('dues-member-modal-id').value = payment.id;
+    document.getElementById('dues-member-modal-name').value = payment.member_name || '';
+    document.getElementById('dues-member-modal-student-id').value = payment.student_id || '';
+    document.getElementById('dues-member-modal-status').value = payment.status || '미납';
+    document.getElementById('dues-member-modal-amount').value = payment.paid_amount || 0;
+    document.getElementById('dues-member-modal-date').value = payment.paid_date || '';
+    document.getElementById('dues-member-modal-memo').value = payment.memo || '';
+
+    const statusSelect = document.getElementById('dues-member-modal-status');
+    const currentItem = feeItems.find(f => f.id === selectedFeeItemId);
+    const targetAmt = currentItem ? currentItem.target_amount : 20000;
+
+    statusSelect.onchange = () => {
+        if (statusSelect.value === '납부 완료' && Number(document.getElementById('dues-member-modal-amount').value) === 0) {
+            document.getElementById('dues-member-modal-amount').value = targetAmt;
+            document.getElementById('dues-member-modal-date').value = new Date().toISOString().slice(0, 10);
+        }
+    };
+
+    openModal('dues-member-modal');
+}
+
+// Handle Dues Member Submit
+async function handleDuesMemberSubmit(e) {
+    e.preventDefault();
+    const id = document.getElementById('dues-member-modal-id').value;
+    const member_name = document.getElementById('dues-member-modal-name').value.trim();
+    const student_id = document.getElementById('dues-member-modal-student-id').value.trim();
+    const status = document.getElementById('dues-member-modal-status').value;
+    const paid_amount = Number(document.getElementById('dues-member-modal-amount').value) || 0;
+    const paid_date = document.getElementById('dues-member-modal-date').value || null;
+    const memo = document.getElementById('dues-member-modal-memo').value.trim();
+
+    if (!member_name) {
+        showToast('부원 성명을 입력해주세요.', 'warning');
+        return;
+    }
+
+    const payload = {
+        fee_item_id: selectedFeeItemId,
+        member_name,
+        student_id,
+        status,
+        paid_amount,
+        paid_date,
+        memo
+    };
+
+    const method = id ? 'PUT' : 'POST';
+    if (id) payload.id = Number(id);
+
+    try {
+        const response = await fetch(`${API_BASE}/dues/payments`, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) throw new Error('부원 정보 저장 실패');
+
+        closeModal('dues-member-modal');
+        showToast(id ? '부원 회비 정보가 수정되었습니다.' : '새 부원이 등록되었습니다.', 'success');
+
+        await selectFeeItem(selectedFeeItemId);
+    } catch (err) {
+        console.error('Save dues member error:', err);
+        showToast('부원 회비 정보 저장에 실패했습니다.', 'error');
+    }
+}
+
+// Delete Dues Member
+async function deleteDuesMember(paymentId) {
+    const payment = currentDuesPayments.find(p => p.id === paymentId);
+    const name = payment ? payment.member_name : '해당 부원';
+
+    if (!confirm(`'${name}' 님의 회비 명단 기록을 삭제하시겠습니까?`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/dues/payments?id=${paymentId}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) throw new Error('삭제 실패');
+
+        showToast(`'${name}' 님의 명단이 삭제되었습니다.`, 'success');
+        await selectFeeItem(selectedFeeItemId);
+    } catch (err) {
+        console.error('Delete dues member error:', err);
+        showToast('부원 삭제 중 오류가 발생했습니다.', 'error');
+    }
+}
+
+// Modal Trigger: Batch Add Members (Paste names)
+function openBatchAddMembersModal() {
+    if (!selectedFeeItemId) {
+        showToast('먼저 회비 항목을 개설하거나 선택해주세요.', 'warning');
+        return;
+    }
+    document.getElementById('dues-batch-names').value = '';
+    openModal('dues-batch-modal');
+}
+
+// Handle Batch Add Submit
+async function handleBatchAddSubmit(e) {
+    e.preventDefault();
+    const rawNames = document.getElementById('dues-batch-names').value;
+    if (!rawNames.trim()) {
+        showToast('부원 이름을 하나 이상 입력해주세요.', 'warning');
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/dues/payments`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                fee_item_id: selectedFeeItemId,
+                names: rawNames
+            })
+        });
+
+        if (!response.ok) throw new Error('일괄 등록 실패');
+        const res = await response.json();
+
+        closeModal('dues-batch-modal');
+        showToast(`총 ${res.added_count}명의 부원이 성공적으로 일괄 등록되었습니다! 🎉`, 'success');
+
+        await selectFeeItem(selectedFeeItemId);
+    } catch (err) {
+        console.error('Batch add error:', err);
+        showToast('부원 일괄 등록 중 오류가 발생했습니다.', 'error');
+    }
+}
+
+// Modal Trigger: Copy Members from other fee item
+function openCopyMembersModal() {
+    if (!selectedFeeItemId) {
+        showToast('먼저 회비 항목을 개설하거나 선택해주세요.', 'warning');
+        return;
+    }
+
+    const selectEl = document.getElementById('dues-copy-source-select');
+    selectEl.innerHTML = '';
+
+    const otherItems = feeItems.filter(f => f.id !== selectedFeeItemId);
+    if (otherItems.length === 0) {
+        showToast('명단을 불러올 다른 회비 항목이 없습니다.', 'info');
+        return;
+    }
+
+    otherItems.forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item.id;
+        opt.textContent = `${item.title} (${item.type} / 등록부원: ${item.total_members || 0}명)`;
+        selectEl.appendChild(opt);
+    });
+
+    openModal('dues-copy-modal');
+}
+
+// Handle Copy Members Submit
+async function handleCopyMembersSubmit(e) {
+    e.preventDefault();
+    const sourceId = document.getElementById('dues-copy-source-select').value;
+    if (!sourceId) return;
+
+    try {
+        const response = await fetch(`${API_BASE}/dues/copy-members`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                source_item_id: Number(sourceId),
+                target_item_id: selectedFeeItemId
+            })
+        });
+
+        if (!response.ok) throw new Error('명단 복사 실패');
+        const res = await response.json();
+
+        closeModal('dues-copy-modal');
+        if (res.copied_count > 0) {
+            showToast(`${res.copied_count}명의 부원 명단을 성공적으로 불러왔습니다!`, 'success');
+        } else {
+            showToast('이미 모든 부원이 등록되어 있어 새로 추가된 부원이 없습니다.', 'info');
+        }
+
+        await selectFeeItem(selectedFeeItemId);
+    } catch (err) {
+        console.error('Copy members error:', err);
+        showToast('명단 불러오기에 실패했습니다.', 'error');
+    }
+}
+
+// Copy Unpaid Members text for Group KakaoTalk Announcement
+function copyUnpaidMembersText() {
+    if (!selectedFeeItemId) return;
+    const currentItem = feeItems.find(f => f.id === selectedFeeItemId);
+    if (!currentItem) return;
+
+    const unpaidList = currentDuesPayments.filter(p => p.status === '미납');
+
+    if (unpaidList.length === 0) {
+        showToast('🎉 모든 부원이 납부를 완료하여 미납자가 없습니다!', 'success');
+        return;
+    }
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const unpaidNamesFormatted = unpaidList.map((p, idx) => {
+        const sub = p.student_id ? ` (${p.student_id})` : '';
+        return `${idx + 1}. ${p.member_name}${sub}`;
+    }).join('\n');
+
+    const noticeText = 
+`📢 [YMC 동아리 회비 납부 현황 공지]
+
+📌 항목: ${currentItem.title}
+💰 회비: ${formatCurrency(currentItem.target_amount)}
+⏳ 마감일: ${currentItem.due_date || '미정'}
+📝 계좌 안내: ${currentItem.description || '회계 담당자에게 문의'}
+
+----------------------------------------
+⚠️ 현재 미납 부원 명단 (총 ${unpaidList.length}명)
+----------------------------------------
+${unpaidNamesFormatted}
+
+원활한 동아리 행사 진행 및 운영을 위해 빠른 납부 부탁드립니다! 🙏
+(기준일시: ${todayStr})`;
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(noticeText).then(() => {
+            showToast('📋 단체 톡방 공지용 미납자 명단이 클립보드에 복사되었습니다!', 'success');
+        }).catch(err => {
+            console.error('Clipboard copy failed:', err);
+            fallbackCopyText(noticeText);
+        });
+    } else {
+        fallbackCopyText(noticeText);
+    }
+}
+
+function fallbackCopyText(text) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+    showToast('📋 단체 톡방 공지용 미납자 명단이 클립보드에 복사되었습니다!', 'success');
+}
+
+// 1-Click Sync Collected Dues to Income Ledger
+async function syncDuesToIncome() {
+    if (!selectedFeeItemId) return;
+    const currentItem = feeItems.find(f => f.id === selectedFeeItemId);
+    if (!currentItem) return;
+
+    const paidList = currentDuesPayments.filter(p => p.status === '납부 완료');
+    const totalPaid = paidList.reduce((acc, cur) => acc + (Number(cur.paid_amount) || 0), 0);
+
+    if (totalPaid <= 0) {
+        showToast('납부 완료된 금액이 없어 수입 장부에 반영할 내역이 없습니다.', 'warning');
+        return;
+    }
+
+    const confirmMsg = 
+`[${currentItem.title}]에서 현재까지 납부 완료된 금액
+총 ${formatCurrency(totalPaid)} (${paidList.length}명)을
+수입 관리 장부에 '회비' 분류로 등록하시겠습니까?`;
+
+    if (!confirm(confirmMsg)) return;
+
+    try {
+        const response = await fetch(`${API_BASE}/dues/sync-to-income`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fee_item_id: selectedFeeItemId })
+        });
+
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.error || '수입 장부 연동 실패');
+        }
+
+        showToast(`총 ${formatCurrency(totalPaid)}이 수입 장부에 성공적으로 반영되었습니다! 💰`, 'success');
+
+        // Refresh income and dashboard stats
+        await Promise.all([
+            fetchIncome(),
+            fetchDashboardStats()
+        ]);
+    } catch (err) {
+        console.error('Sync dues to income error:', err);
+        showToast(err.message || '수입 장부 반영 중 오류가 발생했습니다.', 'error');
+    }
 }
