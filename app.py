@@ -224,7 +224,8 @@ class YMCApiHandler(http.server.SimpleHTTPRequestHandler):
             elif path == '/api/dues/items':
                 # Get fee items with calculated statistics
                 cursor.execute("""
-                    SELECT fi.*, e.name as event_name,
+                    SELECT fi.id, fi.title, fi.type, fi.event_id, fi.target_amount, fi.due_date, fi.description, fi.created_at,
+                           MAX(e.name) as event_name,
                            COUNT(fp.id) as total_members,
                            COALESCE(SUM(CASE WHEN fp.status = '납부 완료' THEN 1 ELSE 0 END), 0) as paid_members,
                            COALESCE(SUM(CASE WHEN fp.status = '미납' THEN 1 ELSE 0 END), 0) as unpaid_members,
@@ -233,7 +234,7 @@ class YMCApiHandler(http.server.SimpleHTTPRequestHandler):
                     FROM fee_items fi
                     LEFT JOIN event_master e ON fi.event_id = e.id
                     LEFT JOIN fee_payments fp ON fi.id = fp.fee_item_id
-                    GROUP BY fi.id
+                    GROUP BY fi.id, fi.title, fi.type, fi.event_id, fi.target_amount, fi.due_date, fi.description, fi.created_at
                     ORDER BY fi.id ASC
                 """)
                 rows = cursor.fetchall()
